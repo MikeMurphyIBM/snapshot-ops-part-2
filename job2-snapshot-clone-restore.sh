@@ -44,11 +44,11 @@ readonly CLOUD_INSTANCE_ID="cc84ef2f-babc-439f-8594-571ecfcbe57a"
 # LPAR Configuration
 readonly PRIMARY_LPAR="get-snapshot"              # Source LPAR for snapshot
 readonly PRIMARY_INSTANCE_ID="c92f6904-8bd2-4093-acec-f641899cd658"
-readonly SECONDARY_LPAR="empty-ibmi-lpar"         # Target LPAR for restore
+readonly SECONDARY_LPAR="manhattan"         # Target LPAR for restore
 readonly STORAGE_TIER="tier3"                     # Must match snapshot tier
 
 # Naming Convention
-readonly CLONE_PREFIX="murph-$(date +"%Y%m%d%H%M")"
+readonly CLONE_PREFIX="manhattan-$(date +"%Y%m%d%H%M")"
 readonly SNAPSHOT_NAME="${CLONE_PREFIX}"
 
 # Polling Configuration
