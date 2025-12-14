@@ -49,13 +49,12 @@ readonly CLOUD_INSTANCE_ID="cc84ef2f-babc-439f-8594-571ecfcbe57a"
 
 # LPAR Configuration
 readonly PRIMARY_LPAR="get-snapshot"              # Source LPAR for cloning
-readonly PRIMARY_INSTANCE_ID="c92f6904-8bd2-4093-acec-f641899cd658"
+readonly PRIMARY_INSTANCE_ID="113196d1-1ee2-4815-8cfe-14df1ddedb59"
 readonly SECONDARY_LPAR="empty-ibmi-lpar"               # Target LPAR for restore
 readonly STORAGE_TIER="tier3"                     # Must match source tier
 
-# Naming Convention - Capture timestamp at script start
-readonly TIMESTAMP="$(date +"%Y%m%d%H%M")"
-readonly CLONE_PREFIX="empty-IBMi-lpar-${TIMESTAMP}"
+# Naming Convention - Clone YYYY-MM-DD-HH-MM
+readonly CLONE_PREFIX="empty-IBMi-lpar-$(date +"%Y%m%d%H%M")"
 
 # Polling Configuration
 readonly POLL_INTERVAL=30
@@ -73,7 +72,6 @@ CLONE_TASK_ID=""
 JOB_SUCCESS=0
 
 echo "Configuration loaded successfully."
-echo "  Clone prefix: ${CLONE_PREFIX}"
 echo ""
 
 ################################################################################
