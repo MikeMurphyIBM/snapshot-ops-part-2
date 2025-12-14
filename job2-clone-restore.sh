@@ -385,19 +385,26 @@ echo "  Clone prefix: ${CLONE_PREFIX}"
 echo "  Storage tier: ${STORAGE_TIER}"
 echo "  Source volumes: ${PRIMARY_VOLUME_IDS}"
 
-CLONE_JSON=$(ibmcloud pi volume clone-async \
+CLONE_JSON=$(ibmcloud pi volume clone-async create \
     --target-tier "$STORAGE_TIER" \
     --volumes "$PRIMARY_VOLUME_IDS" \
     --name "$CLONE_PREFIX" \
-    --json 2>/dev/null) || {
-    echo "✗ ERROR: Clone request failed"
-    exit 1
+    --json) || {
+        echo "✗ ERROR: Clone request failed"
+        exit 1
 }
 
-CLONE_TASK_ID=$(echo "$CLONE_JSON" | jq -r '.clonedVolumes[0].cloneTaskID')
+CLONE_TASK_ID=$(echo "$CLONE_JSON" | jq -r '.cloneTaskID')
+
+if [[ -z "$CLONE_TASK_ID" || "$CLONE_TASK_ID" == "null" ]]; then
+    echo "✗ ERROR: cloneTaskID not returned"
+    echo "$CLONE_JSON"
+    exit 1
+fi
+
 echo "✓ Clone request submitted"
 echo "  Clone task ID: ${CLONE_TASK_ID}"
-echo ""
+
 
 # Wait for clone job to complete
 wait_for_clone_job "$CLONE_TASK_ID"
@@ -407,13 +414,29 @@ echo "→ Extracting cloned volume IDs..."
 
 CLONE_RESULT=$(ibmcloud pi volume clone-async get "$CLONE_TASK_ID" --json)
 
+# Extract boot volume clone
 CLONE_BOOT_ID=$(echo "$CLONE_RESULT" \
-    | jq -r '.clonedVolumes[] | select(.sourceVolume=="'"$PRIMARY_BOOT_ID"'") | .clonedVolume')
+  | jq -r --arg boot "$PRIMARY_BOOT_ID" '
+      .clonedVolumes[]
+      | select(.sourceVolumeID == $boot)
+      | .clonedVolumeID
+  ')
 
+# Extract data volume clones (if any)
 if [[ -n "$PRIMARY_DATA_IDS" ]]; then
-    CLONE_DATA_IDS=$(echo "$CLONE_RESULT" \
-        | jq -r '.clonedVolumes[] | select(.sourceVolume!="'"$PRIMARY_BOOT_ID"'") | .clonedVolume' \
-        | paste -sd "," -)
+  CLONE_DATA_IDS=$(echo "$CLONE_RESULT" \
+    | jq -r --arg boot "$PRIMARY_BOOT_ID" '
+        .clonedVolumes[]
+        | select(.sourceVolumeID != $boot)
+        | .clonedVolumeID
+    ' | paste -sd "," -)
+fi
+
+# Validation
+if [[ -z "$CLONE_BOOT_ID" ]]; then
+  echo "✗ ERROR: Failed to identify cloned boot volume"
+  echo "$CLONE_RESULT"
+  exit 1
 fi
 
 echo "✓ Cloned volume IDs extracted"
@@ -421,12 +444,13 @@ echo "  Boot volume: ${CLONE_BOOT_ID}"
 echo "  Data volumes: ${CLONE_DATA_IDS:-None}"
 echo ""
 
+
 echo "→ Verifying cloned volumes are available..."
 
 # Verify boot volume
 while true; do
     BOOT_STATUS=$(ibmcloud pi volume get "$CLONE_BOOT_ID" --json \
-        | jq -r '.state')
+        | jq -r '.state | ascii_downcase')
     
     if [[ "$BOOT_STATUS" == "available" ]]; then
         echo "✓ Boot volume available: ${CLONE_BOOT_ID}"
@@ -442,7 +466,7 @@ if [[ -n "$CLONE_DATA_IDS" ]]; then
     for VOL in ${CLONE_DATA_IDS//,/ }; do
         while true; do
             DATA_STATUS=$(ibmcloud pi volume get "$VOL" --json \
-                | jq -r '.state')
+                | jq -r '.state | ascii_downcase')
             
             if [[ "$DATA_STATUS" == "available" ]]; then
                 echo "✓ Data volume available: ${VOL}"
