@@ -328,32 +328,35 @@ echo ""
 # -------------------------------------------------------------------------
 # STEP 3: Extract boot and data volume IDs
 # -------------------------------------------------------------------------
+
+
+echo ""
+echo "------------------------------------------------------------------------"
+echo " Stage 2 Complete: Volume identification complete"
+echo "------------------------------------------------------------------------"
+echo ""
+
+################################################################################
+# STAGE 3: CLONE VOLUMES & VERIFY AVAILABILITY
+# Logic:
+#   1. Submit asynchronous clone request with new volume names
+#   2. Extract clone task ID
+#   3. Wait for clone job to complete
+#   4. Extract cloned volume IDs from completed job
+#   5. Separate boot and data volumes
+#   6. Verify all cloned volumes are available before proceeding
+################################################################################
+
 echo "→ Identifying boot and data volumes..."
 
-# Extract boot volume ID
+# Extract boot volume ID (where bootVolume is true)
 PRIMARY_BOOT_ID=$(echo "$PRIMARY_VOLUME_DATA" | jq -r '
-    if .volumes then
-        if (.volumes | type) == "array" then
-            .volumes[] | select(.bootVolume==true or .bootVolume=="true") | .volumeID? // empty
-        else
-            .volumes | to_entries[] | .value | select(.bootVolume==true or .bootVolume=="true") | .volumeID? // empty
-        fi
-    else
-        empty
-    end
+    .volumes[]? | select(.bootVolume == true) | .volumeID
 ' | head -n 1)
 
-# Extract data volume IDs
+# Extract data volume IDs (where bootVolume is false or null)
 PRIMARY_DATA_IDS=$(echo "$PRIMARY_VOLUME_DATA" | jq -r '
-    if .volumes then
-        if (.volumes | type) == "array" then
-            .volumes[] | select(.bootVolume==false or .bootVolume=="false" or .bootVolume==null) | .volumeID? // empty
-        else
-            .volumes | to_entries[] | .value | select(.bootVolume==false or .bootVolume=="false" or .bootVolume==null) | .volumeID? // empty
-        fi
-    else
-        empty
-    end
+    .volumes[]? | select(.bootVolume != true) | .volumeID
 ' | paste -sd "," -)
 
 if [[ -z "$PRIMARY_BOOT_ID" ]]; then
@@ -372,23 +375,6 @@ echo "✓ Volumes identified on primary LPAR"
 echo "  Boot volume:  ${PRIMARY_BOOT_ID}"
 echo "  Data volumes: ${PRIMARY_DATA_IDS:-None}"
 echo "  Total volumes to clone: ${PRIMARY_VOLUME_IDS}"
-
-echo ""
-echo "------------------------------------------------------------------------"
-echo " Stage 2 Complete: Volume identification complete"
-echo "------------------------------------------------------------------------"
-echo ""
-
-################################################################################
-# STAGE 3: CLONE VOLUMES & VERIFY AVAILABILITY
-# Logic:
-#   1. Submit asynchronous clone request with new volume names
-#   2. Extract clone task ID
-#   3. Wait for clone job to complete
-#   4. Extract cloned volume IDs from completed job
-#   5. Separate boot and data volumes
-#   6. Verify all cloned volumes are available before proceeding
-################################################################################
 echo "========================================================================"
 echo " STAGE 3/5: CLONE VOLUMES & VERIFY AVAILABILITY"
 echo "========================================================================"
