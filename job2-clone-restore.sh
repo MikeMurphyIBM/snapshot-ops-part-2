@@ -289,11 +289,6 @@ if [[ "$BOOT_VOLUMES" -ge 1 ]]; then
     echo "✓ Boot volume detected"
     echo "✓ Skipping directly to Stage 5 (boot/start only)"
     RESUME_AT_STAGE_5=1
-else
-    echo "✓ No boot volume attached"
-    echo "✓ Running full workflow from the beginning"
-    RESUME_AT_STAGE_5=0
-fi
 
 
 
@@ -305,6 +300,8 @@ fi
 #   3. Parse JSON to identify boot vs data volumes
 #   4. Extract volume IDs for cloning
 ################################################################################
+
+
 echo "========================================================================"
 echo " STAGE 2/5: IDENTIFY VOLUMES ON PRIMARY LPAR"
 echo "========================================================================"
@@ -313,17 +310,17 @@ echo ""
 # -------------------------------------------------------------------------
 # STEP 1: Resolve secondary LPAR instance ID
 # -------------------------------------------------------------------------
-echo "→ Resolving secondary LPAR instance ID..."
+echo "→ Secondary LPAR resolved in previous step..."
 
-SECONDARY_INSTANCE_ID=$(ibmcloud pi instance list --json \
-    | jq -r ".pvmInstances[] | select(.name == \"$SECONDARY_LPAR\") | .id")
+#SECONDARY_INSTANCE_ID=$(ibmcloud pi instance list --json \
+#    | jq -r ".pvmInstances[] | select(.name == \"$SECONDARY_LPAR\") | .id")
 
-if [[ -z "$SECONDARY_INSTANCE_ID" ]]; then
-    echo "✗ ERROR: Secondary LPAR not found: ${SECONDARY_LPAR}"
-    exit 1
-fi
+#if [[ -z "$SECONDARY_INSTANCE_ID" ]]; then
+#    echo "✗ ERROR: Secondary LPAR not found: ${SECONDARY_LPAR}"
+#    exit 1
+#fi
 
-echo "✓ Secondary LPAR found"
+#echo "✓ Secondary LPAR found"
 echo "  Name: ${SECONDARY_LPAR}"
 echo "  Instance ID: ${SECONDARY_INSTANCE_ID}"
 echo ""
@@ -583,8 +580,12 @@ echo "------------------------------------------------------------------------"
 echo ""
 
 else
-    echo "→ Resume mode enabled — skipping Stages 1–4"
+    echo "✓ No boot volume attached"
+    echo "✓ Running full workflow from the beginning"
+    RESUME_AT_STAGE_5=0
 fi
+
+
 ################################################################################
 # STAGE 5: BOOT SECONDARY LPAR
 # Logic:
