@@ -260,49 +260,41 @@ echo ""
 # ENSURE SECONDARY_INSTANCE_ID IS KNOWN (FOR RESUME CHECK)
 ###############################################################################
 
-if [[ -z "${SECONDARY_INSTANCE_ID:-}" ]]; then
-    echo "→ Resolving secondary LPAR instance ID for resume check..."
+echo "→ Resolving secondary LPAR instance ID..."
 
-    SECONDARY_INSTANCE_ID=$(ibmcloud pi instance list --json 2>/dev/null \
-        | jq -r --arg N "$SECONDARY_LPAR" \
-          '.pvmInstances[]? | select(.name==$N) | .id' \
-        | head -n 1)
+SECONDARY_INSTANCE_ID=$(ibmcloud pi instance list --json 2>/dev/null \
+    | jq -r --arg N "$SECONDARY_LPAR" \
+      '.pvmInstances[] | select(.name==$N) | .id' \
+    | head -n 1)
 
-    if [[ -z "$SECONDARY_INSTANCE_ID" || "$SECONDARY_INSTANCE_ID" == "null" ]]; then
-        echo "✓ Secondary LPAR does not exist yet"
-        echo "✓ Full workflow will be executed"
-        RESUME_AT_STAGE_5=0
-    else
-        echo "✓ Found secondary LPAR: ${SECONDARY_INSTANCE_ID}"
-    fi
+if [[ -z "$SECONDARY_INSTANCE_ID" || "$SECONDARY_INSTANCE_ID" == "null" ]]; then
+    echo "✗ ERROR: Secondary LPAR '${SECONDARY_LPAR}' not found"
+    exit 1
 fi
 
+echo "✓ Secondary LPAR ID: ${SECONDARY_INSTANCE_ID}"
 
-INSTANCE_JSON=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json)
+echo "→ Checking attached volumes on secondary LPAR..."
 
-STATUS=$(echo "$INSTANCE_JSON" | jq -r '.status')
-BOOT_VOLUMES=$(echo "$INSTANCE_JSON" | jq '[.volumes[] | select(.bootable == true)] | length')
+VOLUME_JSON=$(ibmcloud pi instance volume list "$SECONDARY_INSTANCE_ID" --json 2>/dev/null)
 
-echo "  LPAR status          : ${STATUS}"
-echo "  Boot volumes attached: ${BOOT_VOLUMES}"
+BOOT_VOLUMES=$(echo "$VOLUME_JSON" | jq '[.volumes[] | select(.bootable == true)] | length')
+TOTAL_VOLUMES=$(echo "$VOLUME_JSON" | jq '.volumes | length')
+
+echo "  Total attached volumes: ${TOTAL_VOLUMES}"
+echo "  Bootable volumes       : ${BOOT_VOLUMES}"
 echo ""
-
-if [[ "$STATUS" == "ACTIVE" ]]; then
-    echo "✓ LPAR already ACTIVE — no action required"
-    exit 0
-fi
 
 if [[ "$BOOT_VOLUMES" -ge 1 ]]; then
     echo "✓ Boot volume detected"
-    echo "✓ Skipping directly to Stage 5"
+    echo "✓ Skipping directly to Stage 5 (boot/start only)"
     RESUME_AT_STAGE_5=1
 else
     echo "✓ No boot volume attached"
-    echo "✓ Running full workflow"
+    echo "✓ Running full workflow from the beginning"
     RESUME_AT_STAGE_5=0
 fi
 
-if [[ "$RESUME_AT_STAGE_5" -ne 1 ]]; then
 
 
 ################################################################################
@@ -343,32 +335,11 @@ echo "→ Querying volumes on primary LPAR: ${PRIMARY_LPAR}..."
 
 PRIMARY_VOLUME_DATA=$(ibmcloud pi ins vol ls "$PRIMARY_INSTANCE_ID" --json 2>/dev/null)
 
-# Debug: Show structure
-#echo "  Debug: Volume data structure..."
-#echo "$PRIMARY_VOLUME_DATA" | jq '.' || echo "  Could not parse JSON"
-#echo ""
 
 # -------------------------------------------------------------------------
 # STEP 3: Extract boot and data volume IDs
 # -------------------------------------------------------------------------
 
-
-echo ""
-echo "------------------------------------------------------------------------"
-echo " Stage 2 Complete: Volume identification complete"
-echo "------------------------------------------------------------------------"
-echo ""
-
-################################################################################
-# STAGE 3: CLONE VOLUMES & VERIFY AVAILABILITY
-# Logic:
-#   1. Submit asynchronous clone request with new volume names
-#   2. Extract clone task ID
-#   3. Wait for clone job to complete
-#   4. Extract cloned volume IDs from completed job
-#   5. Separate boot and data volumes
-#   6. Verify all cloned volumes are available before proceeding
-################################################################################
 
 echo "→ Identifying boot and data volumes..."
 
@@ -398,6 +369,16 @@ echo "✓ Volumes identified on primary LPAR"
 echo "  Boot volume:  ${PRIMARY_BOOT_ID}"
 echo "  Data volumes: ${PRIMARY_DATA_IDS:-None}"
 echo "  Total volumes to clone: ${PRIMARY_VOLUME_IDS}"
+
+
+
+echo ""
+echo "------------------------------------------------------------------------"
+echo " Stage 2 Complete: Volume identification complete"
+echo "------------------------------------------------------------------------"
+echo ""
+
+
 echo "========================================================================"
 echo " STAGE 3/5: CLONE VOLUMES & VERIFY AVAILABILITY"
 echo "========================================================================"
