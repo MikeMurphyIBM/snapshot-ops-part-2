@@ -715,7 +715,7 @@ echo "========================================================================"
 echo ""
 
 if [[ "${RUN_CLEANUP_JOB:-No}" == "Yes" ]]; then
-    echo "→ Proceed to environment cleanup requested - triggering Job 3..."
+    echo "→ Environment cleanup requested - triggering Job 3..."
     
     echo "  Switching to Code Engine project: IBMi..."
     ibmcloud ce project target --name IBMi > /dev/null 2>&1 || {
@@ -739,10 +739,10 @@ if [[ "${RUN_CLEANUP_JOB:-No}" == "Yes" ]]; then
         exit 1
     fi
     
-    echo "✓ Job 3 (cleanup) triggered successfully"
+    echo "✓ Environment Cleanup triggered successfully"
     echo "  Jobrun instance: ${NEXT_RUN}"
 else
-    echo "→ Proceed to Cleanup Environment not set - skipping Job 3"
+    echo "→ Proceed to Environment Cleanup not requested"
     echo "  ${SECONDARY_LPAR} is ${FINAL_STATUS} and ready for BRMS Backup Operations "
 fi
 
