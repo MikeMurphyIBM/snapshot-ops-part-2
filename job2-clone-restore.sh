@@ -748,7 +748,6 @@ while true; do
     if [[ "$STATUS" == "ACTIVE" ]]; then
         echo ""
         echo "✓ LPAR is ACTIVE"
-        JOB_SUCCESS=1
         break
     fi
 
@@ -777,8 +776,13 @@ echo " Stage 5 Complete: LPAR booted successfully"
 echo "------------------------------------------------------------------------"
 echo ""
 
-echo "Finalizing job..."
-sleep 3m
+echo ""
+echo "------------------------------------------------------------------------"
+echo " Waiting 3 minutes for LPAR stabilization..."
+echo "------------------------------------------------------------------------"
+echo ""
+sleep 180
+
 ################################################################################
 # FINAL VALIDATION & SUMMARY
 ################################################################################
@@ -790,7 +794,7 @@ echo "========================================================================"
 echo ""
 
 # -------------------------------------------------------------------------
-# Final status readback (do NOT disable traps here)
+# Final status readback (temporarily disable error handling)
 # -------------------------------------------------------------------------
 set +e
 FINAL_CHECK=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null)
@@ -896,6 +900,4 @@ echo ""
 echo "========================================================================"
 echo ""
 
-JOB_SUCCESS=1
-sleep 1
 exit 0
