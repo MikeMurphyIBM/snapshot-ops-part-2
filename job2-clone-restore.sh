@@ -84,134 +84,99 @@ echo ""
 #   4. Bulk delete cloned volumes
 #   5. Verify deletion completed
 ################################################################################
+
+
 cleanup_on_failure() {
     trap - ERR EXIT
-    
-    # Skip cleanup if job completed successfully
+
+    # If job succeeded, do nothing
     if [[ ${JOB_SUCCESS:-0} -eq 1 ]]; then
-        echo "Job completed successfully - no cleanup needed"
         return 0
     fi
-    
+
+    FAILED_AT="${FAILED_STAGE:-UNKNOWN_STAGE}"
+
     echo ""
     echo "========================================================================"
-    echo " FAILURE DETECTED - INITIATING CLEANUP"
+    echo " JOB FAILED — PRESERVING RECOVERY ARTIFACTS"
     echo "========================================================================"
     echo ""
-    
-    # -------------------------------------------------------------------------
-    # STEP 1: Resolve secondary LPAR instance ID (if not already resolved)
-    # -------------------------------------------------------------------------
-    if [[ -z "$SECONDARY_INSTANCE_ID" ]]; then
-        echo "→ Resolving secondary LPAR instance ID..."
-        
-        SECONDARY_INSTANCE_ID=$(ibmcloud pi instance list --json 2>/dev/null \
-            | jq -r --arg N "$SECONDARY_LPAR" '.pvmInstances[]? | select(.name==$N) | .id' \
-            | head -n 1)
+    echo "Failure detected at stage: ${FAILED_AT}"
+    echo ""
+
+    #
+    # Only mark volumes for relevant failures
+    #
+    case "$FAILED_AT" in
+        ATTACH_VOLUME|BOOT_CONFIG|STARTUP)
+            MARK_VOLUMES=1
+            ;;
+        *)
+            MARK_VOLUMES=0
+            ;;
+    esac
+
+    if [[ "$MARK_VOLUMES" -ne 1 ]]; then
+        echo "Failure stage does not require volume marking — skipping"
+        return 0
     fi
-    
-    if [[ -z "$SECONDARY_INSTANCE_ID" || "$SECONDARY_INSTANCE_ID" == "null" ]]; then
-        echo "  ⚠ No LPAR found named '${SECONDARY_LPAR}'"
-        echo "  Skipping volume cleanup - proceeding to cloned volume deletion"
-    else
-        echo "✓ Found LPAR '${SECONDARY_LPAR}'"
-        echo "  Instance ID: ${SECONDARY_INSTANCE_ID}"
-        
-        # ---------------------------------------------------------------------
-        # STEP 2: Bulk detach all volumes (if any are attached)
-        # ---------------------------------------------------------------------
-        echo "→ Checking for attached volumes..."
-        
-        ATTACHED=$(ibmcloud pi instance volume list "$SECONDARY_INSTANCE_ID" --json 2>/dev/null \
-            | jq -r '(.volumes // [])[] | .volumeID' || true)
-        
-        if [[ -n "$ATTACHED" ]]; then
-            echo "  Volumes detected - requesting bulk detach..."
-            
-            ibmcloud pi instance volume bulk-detach "$SECONDARY_INSTANCE_ID" \
-                --detach-all \
-                --detach-primary > /dev/null 2>&1 || true
-            
-            echo "  Waiting for detachment to complete..."
-            
-            WAIT_TIME=30
-            MAX_DETACH_WAIT=240
-            ELAPSED=30
-            
-            sleep $WAIT_TIME
-            
-            while true; do
-                ATTACHED=$(ibmcloud pi instance volume list "$SECONDARY_INSTANCE_ID" --json 2>/dev/null \
-                    | jq -r '(.volumes // [])[] | .volumeID')
-                
-                if [[ -z "$ATTACHED" ]]; then
-                    echo "✓ All volumes detached"
-                    break
-                fi
-                
-                if [[ $ELAPSED -ge $MAX_DETACH_WAIT ]]; then
-                    echo "  ⚠ WARNING: Volumes still attached after ${MAX_DETACH_WAIT}s"
-                    echo "  ⚠ Proceeding with deletion anyway"
-                    break
-                fi
-                
-                echo "  Volumes still attached - retrying in ${POLL_INTERVAL}s"
-                sleep "$POLL_INTERVAL"
-                ELAPSED=$((ELAPSED + POLL_INTERVAL))
-            done
-        else
-            echo "  No volumes attached - skipping detach"
-        fi
-    fi
-    
-    # -------------------------------------------------------------------------
-    # STEP 3: Bulk delete cloned volumes
-    # -------------------------------------------------------------------------
-    echo "→ Deleting cloned volumes..."
-    
+
+    #
+    # Mark boot volume
+    #
     if [[ -n "$CLONE_BOOT_ID" ]]; then
-        if [[ -n "$CLONE_DATA_IDS" ]]; then
-            # Delete boot + data volumes
-            ibmcloud pi volume bulk-delete \
-                --volumes "${CLONE_BOOT_ID},${CLONE_DATA_IDS}" > /dev/null 2>&1 || true
-        else
-            # Delete boot volume only
-            ibmcloud pi volume bulk-delete \
-                --volumes "${CLONE_BOOT_ID}" > /dev/null 2>&1 || true
+        echo "→ Marking boot volume as FAILED..."
+
+        CURRENT_NAME=$(ibmcloud pi volume get "$CLONE_BOOT_ID" --json \
+            | jq -r '.name')
+
+        if [[ "$CURRENT_NAME" != *"__FAILED" ]]; then
+            ibmcloud pi volume update "$CLONE_BOOT_ID" \
+                --name "${CURRENT_NAME}__FAILED" \
+                >/dev/null 2>&1 || true
         fi
+
+        echo "  Boot volume preserved: ${CURRENT_NAME}__FAILED"
     fi
-    
-    # -------------------------------------------------------------------------
-    # STEP 4: Verify deletion
-    # -------------------------------------------------------------------------
-    echo "→ Verifying volume deletion..."
-    
-    sleep 5
-    
-    if [[ -n "$CLONE_BOOT_ID" ]]; then
-        if ibmcloud pi volume get "$CLONE_BOOT_ID" --json > /dev/null 2>&1; then
-            echo "  ⚠ WARNING: Boot volume still exists - manual review required"
-        else
-            echo "✓ Boot volume deleted: ${CLONE_BOOT_ID}"
-        fi
-    fi
-    
+
+    #
+    # Mark data volumes (if any)
+    #
     if [[ -n "$CLONE_DATA_IDS" ]]; then
         for VOL in ${CLONE_DATA_IDS//,/ }; do
-            if ibmcloud pi volume get "$VOL" --json > /dev/null 2>&1; then
-                echo "  ⚠ WARNING: Data volume still exists - manual review required: ${VOL}"
-            else
-                echo "✓ Data volume deleted: ${VOL}"
+            echo "→ Marking data volume ${VOL} as FAILED..."
+
+            CURRENT_NAME=$(ibmcloud pi volume get "$VOL" --json \
+                | jq -r '.name')
+
+            if [[ "$CURRENT_NAME" != *"__FAILED" ]]; then
+                ibmcloud pi volume update "$VOL" \
+                    --name "${CURRENT_NAME}__FAILED" \
+                    >/dev/null 2>&1 || true
             fi
+
+            echo "  Data volume preserved: ${CURRENT_NAME}__FAILED"
         done
     fi
-    
+
     echo ""
     echo "========================================================================"
-    echo " CLEANUP COMPLETE"
+    echo " FAILURE SUMMARY"
+    echo "========================================================================"
+    echo " Secondary LPAR : ${SECONDARY_LPAR}"
+    echo " Failure stage  : ${FAILED_AT}"
+    echo " Volumes marked : __FAILED"
+    echo " Cleanup job    : separate job required"
     echo "========================================================================"
     echo ""
 }
+
+
+    
+ 
+        
+   
+
 
 ################################################################################
 # HELPER FUNCTION: WAIT FOR ASYNC CLONE JOB
