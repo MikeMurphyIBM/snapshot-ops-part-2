@@ -177,12 +177,6 @@ cleanup_on_failure() {
 }
 
 
-    
- 
-        
-   
-
-
 ################################################################################
 # HELPER FUNCTION: WAIT FOR ASYNC CLONE JOB
 # Logic:
