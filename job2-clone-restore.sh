@@ -771,9 +771,35 @@ echo ""
 # Final status readback (with error handling)
 set +e
 FINAL_CHECK=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null)
-FINAL_STATUS=$(echo "$FINAL_CHECK" | jq -r '.status // "ACTIVE"' 2>/dev/null)
+FINAL_STATUS=$(echo "$FINAL_CHECK" | jq -r '.status // "UNKNOWN"' 2>/dev/null)
 set -e
 
+# -------------------------------------------------------------------------
+# Final success / failure gate
+# -------------------------------------------------------------------------
+if [[ "$FINAL_STATUS" != "ACTIVE" ]]; then
+    echo ""
+    echo "========================================================================"
+    echo " FINAL STATE CHECK FAILED"
+    echo "========================================================================"
+    echo ""
+    echo "✗ Secondary LPAR did not reach ACTIVE state"
+    echo "  Final status: ${FINAL_STATUS}"
+    echo ""
+    echo "✗ Job marked as FAILED — recovery artifacts preserved"
+    echo ""
+
+    FAILED_STAGE="FINAL_STATUS_CHECK"
+    exit 1
+fi
+
+# -------------------------------------------------------------------------
+# Success summary
+# -------------------------------------------------------------------------
+echo "========================================================================"
+echo " JOB COMPLETED SUCCESSFULLY"
+echo "========================================================================"
+echo ""
 echo "  Status:                  ✓ SUCCESS"
 echo "  ────────────────────────────────────────────────────────────────"
 echo "  Primary LPAR:            ${PRIMARY_LPAR}"
@@ -791,6 +817,9 @@ echo "  Clone Prefix:            ${CLONE_PREFIX}"
 echo ""
 echo "========================================================================"
 echo ""
+
+JOB_SUCCESS=1
+
 
 # Disable cleanup trap - job completed successfully
 trap - ERR EXIT
