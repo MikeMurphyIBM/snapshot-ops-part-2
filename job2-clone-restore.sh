@@ -286,6 +286,16 @@ echo "  Bootable volumes       : ${BOOT_VOLUMES}"
 echo ""
 
 ###############################################################################
+# DECISION: SKIP TO STAGE 5 IF BOOT VOLUME ALREADY ATTACHED
+###############################################################################
+if [[ "$BOOT_VOLUMES" -gt 0 ]]; then
+    echo "⚠ Boot volume already attached - skipping clone/attach stages"
+    echo "  Resuming at Stage 5 (Boot LPAR)"
+    echo ""
+    RESUME_AT_STAGE_5=1
+fi
+
+###############################################################################
 # RESUME MODE: CAPTURE EXISTING ATTACHED VOLUMES FOR FAILURE MARKING
 ###############################################################################
 if [[ "$RESUME_AT_STAGE_5" -eq 1 ]]; then
