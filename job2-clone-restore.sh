@@ -89,6 +89,9 @@ echo ""
 cleanup_on_failure() {
     trap - ERR EXIT
 
+    echo "→ cleanup_on_failure triggered (FAILED_STAGE=${FAILED_STAGE:-UNKNOWN})"
+
+
     # If job succeeded, do nothing
     if [[ ${JOB_SUCCESS:-0} -eq 1 ]]; then
         return 0
@@ -771,18 +774,19 @@ echo " JOB 2: COMPLETION SUMMARY"
 echo "========================================================================"
 echo ""
 
-# Final status readback (do NOT suppress failure)
+# -------------------------------------------------------------------------
+# Final status readback (do NOT disable traps here)
+# -------------------------------------------------------------------------
 set +e
 FINAL_CHECK=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null)
 FINAL_STATUS=$(echo "$FINAL_CHECK" | jq -r '.status // "UNKNOWN"' 2>/dev/null)
 set -e
 
-echo "→ Final LPAR status check:"
-echo "  Status: ${FINAL_STATUS}"
+echo "→ Final LPAR status check: ${FINAL_STATUS}"
 echo ""
 
 # -------------------------------------------------------------------------
-# Final success / failure gate
+# FAILURE PATH (this MUST allow cleanup trap to run)
 # -------------------------------------------------------------------------
 if [[ "$FINAL_STATUS" != "ACTIVE" ]]; then
     echo ""
@@ -790,21 +794,18 @@ if [[ "$FINAL_STATUS" != "ACTIVE" ]]; then
     echo " FINAL STATE CHECK FAILED"
     echo "========================================================================"
     echo ""
-    echo "✗ Secondary LPAR is NOT ACTIVE at job completion"
-    echo "✗ Final status: ${FINAL_STATUS}"
+    echo "✗ Secondary LPAR did not remain ACTIVE"
+    echo "  Final status: ${FINAL_STATUS}"
     echo ""
-    echo "✗ Job marked as FAILED — volumes will be preserved and renamed"
+    echo "✗ Job marked as FAILED — recovery artifacts preserved"
     echo ""
 
     FAILED_STAGE="FINAL_STATUS_CHECK"
-
-    # ❗ DO NOT set JOB_SUCCESS
-    # ❗ DO NOT disable trap
-    exit 1
+    exit 1   # cleanup_on_failure WILL RUN
 fi
 
 # -------------------------------------------------------------------------
-# Success summary (ONLY HERE is the job successful)
+# SUCCESS PATH (ONLY HERE is the job successful)
 # -------------------------------------------------------------------------
 echo "========================================================================"
 echo " JOB COMPLETED SUCCESSFULLY"
@@ -815,20 +816,22 @@ echo "  Primary LPAR:            ${PRIMARY_LPAR}"
 echo "  Secondary LPAR:          ${SECONDARY_LPAR}"
 echo "  Secondary Instance ID:   ${SECONDARY_INSTANCE_ID}"
 echo "  Final Status:            ${FINAL_STATUS}"
+echo "  ────────────────────────────────────────────────────────────────"
 echo "  Volumes Cloned:          ✓ Yes"
 echo "  Boot Volume:             ${CLONE_BOOT_ID}"
 echo "  Data Volumes:            ${CLONE_DATA_IDS:-None}"
 echo "  Volumes Attached:        ✓ Yes"
 echo "  Boot Mode:               ✓ NORMAL (Mode A)"
+echo "  ────────────────────────────────────────────────────────────────"
 echo "  Clone Prefix:            ${CLONE_PREFIX}"
 echo ""
 echo "========================================================================"
 echo ""
 
-# mark job as successful
-# JOB_SUCCESS=1
-
-# disable cleanup
+# -------------------------------------------------------------------------
+# Mark job successful AND ONLY NOW disable cleanup
+# -------------------------------------------------------------------------
+JOB_SUCCESS=1
 trap - ERR EXIT
 
 
