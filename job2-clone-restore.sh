@@ -70,6 +70,7 @@ CLONE_BOOT_ID=""
 CLONE_DATA_IDS=""
 CLONE_TASK_ID=""
 JOB_SUCCESS=0
+RESUME_AT_STAGE_5=0   
 
 echo "Configuration loaded successfully."
 echo ""
@@ -528,8 +529,10 @@ if [[ -n "$CLONE_DATA_IDS" ]]; then
         --boot-volume "$CLONE_BOOT_ID" \
         >/dev/null 2>&1 || {
             echo "✗ ERROR: Volume attachment failed"
+            FAILED_STAGE="ATTACH_VOLUME"
             exit 1
-        }
+    }
+
 else
     echo "  Attaching boot volume only..."
     ibmcloud pi instance volume attach "$SECONDARY_INSTANCE_ID" \
@@ -661,12 +664,14 @@ if [[ "$CURRENT_STATUS" != "ACTIVE" ]]; then
         BOOTCFG_ATTEMPT=$((BOOTCFG_ATTEMPT + 1))
     done
 
-    if [[ $BOOTCFG_SUCCESS -ne 1 ]]; then
-        echo ""
-        echo "✗ ERROR: Boot configuration failed after ${MAX_BOOTCFG_ATTEMPTS} attempts"
-        echo "✗ Critical failure — volumes will NOT be detached or deleted"
-        exit 1
-    fi
+        if [[ $BOOTCFG_SUCCESS -ne 1 ]]; then
+            echo ""
+            echo "✗ ERROR: Boot configuration failed after ${MAX_BOOTCFG_ATTEMPTS} attempts"
+            echo "✗ Critical failure — volumes will NOT be detached or deleted"
+            FAILED_STAGE="BOOT_CONFIG"
+            exit 1
+        fi
+
 
     echo ""
 
@@ -718,8 +723,10 @@ if [[ "$CURRENT_STATUS" != "ACTIVE" ]]; then
         echo ""
         echo "✗ ERROR: LPAR start failed after ${MAX_START_ATTEMPTS} attempts"
         echo "✗ Critical failure — volumes will NOT be detached or deleted"
+        FAILED_STAGE="STARTUP"
         exit 1
     fi
+
 
 else
     echo "  LPAR already ACTIVE - skipping boot sequence"
@@ -748,14 +755,14 @@ while true; do
     if [[ "$STATUS" == "ERROR" ]]; then
         echo ""
         echo "✗ ERROR: LPAR entered ERROR state during boot"
-        echo "✗ Critical failure — volumes will NOT be detached or deleted"
+        FAILED_STAGE="STARTUP"
         exit 1
     fi
 
     if [[ $BOOT_ELAPSED -ge $MAX_BOOT_WAIT ]]; then
         echo ""
         echo "✗ ERROR: LPAR failed to reach ACTIVE state within $(($MAX_BOOT_WAIT/60)) minutes"
-        echo "✗ Critical failure — volumes will NOT be detached or deleted"
+        FAILED_STAGE="STARTUP"
         exit 1
     fi
 
