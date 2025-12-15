@@ -321,9 +321,9 @@ echo "→ Querying volumes on primary LPAR: ${PRIMARY_LPAR}..."
 PRIMARY_VOLUME_DATA=$(ibmcloud pi ins vol ls "$PRIMARY_INSTANCE_ID" --json 2>/dev/null)
 
 # Debug: Show structure
-echo "  Debug: Volume data structure..."
-echo "$PRIMARY_VOLUME_DATA" | jq '.' || echo "  Could not parse JSON"
-echo ""
+#echo "  Debug: Volume data structure..."
+#echo "$PRIMARY_VOLUME_DATA" | jq '.' || echo "  Could not parse JSON"
+#echo ""
 
 # -------------------------------------------------------------------------
 # STEP 3: Extract boot and data volume IDs
@@ -501,62 +501,72 @@ echo "  LPAR: ${SECONDARY_LPAR}"
 echo "  Instance ID: ${SECONDARY_INSTANCE_ID}"
 echo ""
 
+# --- Submit attachment request ---
 if [[ -n "$CLONE_DATA_IDS" ]]; then
     echo "  Attaching boot + data volumes..."
     ibmcloud pi instance volume attach "$SECONDARY_INSTANCE_ID" \
         --volumes "$CLONE_DATA_IDS" \
-        --boot-volume "$CLONE_BOOT_ID" || {
-        echo "✗ ERROR: Volume attachment failed"
-        exit 1
-    }
+        --boot-volume "$CLONE_BOOT_ID" \
+        >/dev/null 2>&1 || {
+            echo "✗ ERROR: Volume attachment failed"
+            exit 1
+        }
 else
     echo "  Attaching boot volume only..."
     ibmcloud pi instance volume attach "$SECONDARY_INSTANCE_ID" \
-        --boot-volume "$CLONE_BOOT_ID" || {
-        echo "✗ ERROR: Boot volume attachment failed"
-        exit 1
-    }
+        --boot-volume "$CLONE_BOOT_ID" \
+        >/dev/null 2>&1 || {
+            echo "✗ ERROR: Boot volume attachment failed"
+            exit 1
+        }
 fi
 
 echo "✓ Attachment request accepted"
 echo ""
 
+# --- Initial backend settle delay ---
 echo "→ Waiting ${INITIAL_WAIT}s for backend stabilization..."
-sleep $INITIAL_WAIT
+sleep "$INITIAL_WAIT"
 echo ""
 
+# --- Poll for attachment confirmation ---
 echo "→ Polling for volume attachment confirmation..."
 
 ELAPSED=0
 
 while true; do
     VOL_LIST=$(ibmcloud pi instance volume list "$SECONDARY_INSTANCE_ID" --json 2>/dev/null \
-        | jq -r '(.volumes // []) | .[]? | .volumeID')
-    
-    # Check boot volume is attached
-    BOOT_ATTACHED=$(echo "$VOL_LIST" | grep -q "$CLONE_BOOT_ID" && echo yes || echo no)
-    
-    # Check all data volumes are attached
+        | jq -r '(.volumes // [])[]?.volumeID')
+
+    # Assume success until proven otherwise
+    BOOT_ATTACHED=false
     DATA_ATTACHED=true
+
+    # Check boot volume
+    if grep -qx "$CLONE_BOOT_ID" <<<"$VOL_LIST"; then
+        BOOT_ATTACHED=true
+    fi
+
+    # Check data volumes (if any)
     if [[ -n "$CLONE_DATA_IDS" ]]; then
         for VOL in ${CLONE_DATA_IDS//,/ }; do
-            if ! echo "$VOL_LIST" | grep -q "$VOL"; then
+            if ! grep -qx "$VOL" <<<"$VOL_LIST"; then
                 DATA_ATTACHED=false
                 break
             fi
         done
     fi
-    
-    if [[ "$BOOT_ATTACHED" == "yes" && "$DATA_ATTACHED" == "true" ]]; then
+
+    if [[ "$BOOT_ATTACHED" == "true" && "$DATA_ATTACHED" == "true" ]]; then
         echo "✓ All volumes confirmed attached"
         break
     fi
-    
-    if [[ $ELAPSED -ge $MAX_ATTACH_WAIT ]]; then
+
+    if (( ELAPSED >= MAX_ATTACH_WAIT )); then
         echo "✗ ERROR: Volumes not attached after ${MAX_ATTACH_WAIT}s"
         exit 1
     fi
-    
+
     echo "  Volumes not fully visible yet - checking again in ${POLL_INTERVAL}s..."
     sleep "$POLL_INTERVAL"
     ELAPSED=$((ELAPSED + POLL_INTERVAL))
@@ -583,7 +593,7 @@ echo ""
 
 echo "→ Checking current LPAR status..."
 
-CURRENT_STATUS=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json \
+CURRENT_STATUS=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null \
     | jq -r '.status')
 
 echo "  Current status: ${CURRENT_STATUS}"
@@ -595,20 +605,23 @@ if [[ "$CURRENT_STATUS" != "ACTIVE" ]]; then
     ibmcloud pi instance operation "$SECONDARY_INSTANCE_ID" \
         --operation-type boot \
         --boot-mode a \
-        --boot-operating-mode normal || {
-        echo "✗ ERROR: Boot configuration failed"
-        exit 1
-    }
+        --boot-operating-mode normal \
+        >/dev/null 2>&1 || {
+            echo "✗ ERROR: Boot configuration failed"
+            exit 1
+        }
     
     echo "✓ Boot mode configured"
     echo ""
     
     echo "→ Starting LPAR..."
     
-    ibmcloud pi instance action "$SECONDARY_INSTANCE_ID" --operation start || {
-        echo "✗ ERROR: LPAR start command failed"
-        exit 1
-    }
+    ibmcloud pi instance action "$SECONDARY_INSTANCE_ID" \
+        --operation start \
+        >/dev/null 2>&1 || {
+            echo "✗ ERROR: LPAR start command failed"
+            exit 1
+        }
     
     echo "✓ Start command accepted"
 else
@@ -623,7 +636,7 @@ echo ""
 BOOT_ELAPSED=0
 
 while true; do
-    STATUS=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json \
+    STATUS=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null \
         | jq -r '.status')
     
     echo "  LPAR status: ${STATUS} (elapsed: ${BOOT_ELAPSED}s)"
@@ -730,7 +743,7 @@ if [[ "${RUN_CLEANUP_JOB:-No}" == "Yes" ]]; then
     echo "  Jobrun instance: ${NEXT_RUN}"
 else
     echo "→ RUN_CLEANUP_JOB not set - skipping Job 3"
-    echo "  Volumes will remain until manual cleanup"
+    echo "  ${SECONDARY_LPAR} is ${FINAL_STATUS} and ready for BRMS Backup Operations "
 fi
 
 echo ""
