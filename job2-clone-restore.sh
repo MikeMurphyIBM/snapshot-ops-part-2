@@ -56,6 +56,10 @@ readonly STORAGE_TIER="tier3"                     # Must match source tier
 # Naming Convention - Clone YYYY-MM-DD-HH-MM
 readonly CLONE_PREFIX="get-snapshot-$(date +"%Y%m%d%H%M")"
 
+#Code Engine Variable for Optional Stage
+readonly JOB_3_CLEANUP="snap-ops-3"
+
+
 # Polling Configuration
 readonly POLL_INTERVAL=30
 readonly INITIAL_WAIT=30
@@ -726,7 +730,7 @@ if [[ "${RUN_CLEANUP_JOB:-No}" == "Yes" ]]; then
     echo "  Submitting Code Engine job: prod-cleanup..."
     
     RAW_SUBMISSION=$(ibmcloud ce jobrun submit \
-        --job prod-cleanup \
+        --job "$JOB_3_CLEANUP" \
         --output json 2>&1)
     
     NEXT_RUN=$(echo "$RAW_SUBMISSION" | jq -r '.metadata.name // .name // empty' 2>/dev/null || true)
