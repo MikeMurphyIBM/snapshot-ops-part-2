@@ -54,7 +54,7 @@ readonly SECONDARY_LPAR="empty-ibmi-lpar"               # Target LPAR for restor
 readonly STORAGE_TIER="tier3"                     # Must match source tier
 
 # Naming Convention - Clone YYYY-MM-DD-HH-MM
-readonly CLONE_PREFIX="empty-IBMi-lpar-$(date +"%Y%m%d%H%M")"
+readonly CLONE_PREFIX="get-snapshot-$(date +"%Y%m%d%H%M")"
 
 # Polling Configuration
 readonly POLL_INTERVAL=30
