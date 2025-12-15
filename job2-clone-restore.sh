@@ -111,13 +111,15 @@ cleanup_on_failure() {
     # Only mark volumes for relevant failures
     #
     case "$FAILED_AT" in
-        ATTACH_VOLUME|BOOT_CONFIG|STARTUP)
+        ATTACH_VOLUME|BOOT_CONFIG|STARTUP|FINAL_STATUS_CHECK)
             MARK_VOLUMES=1
             ;;
         *)
             MARK_VOLUMES=0
             ;;
     esac
+
+
 
     if [[ "$MARK_VOLUMES" -ne 1 ]]; then
         echo "Failure stage does not require volume marking — skipping"
