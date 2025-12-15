@@ -385,10 +385,9 @@ echo "  Clone prefix: ${CLONE_PREFIX}"
 echo "  Storage tier: ${STORAGE_TIER}"
 echo "  Source volumes: ${PRIMARY_VOLUME_IDS}"
 
-CLONE_JSON=$(ibmcloud pi volume clone-async create \
+CLONE_JSON=$(ibmcloud pi volume clone-async create "$CLONE_PREFIX" \
     --target-tier "$STORAGE_TIER" \
     --volumes "$PRIMARY_VOLUME_IDS" \
-    --name "$CLONE_PREFIX" \
     --json) || {
         echo "✗ ERROR: Clone request failed"
         exit 1
