@@ -290,15 +290,27 @@ echo "  Total attached volumes: ${TOTAL_VOLUMES}"
 echo "  Bootable volumes       : ${BOOT_VOLUMES}"
 echo ""
 
-if [[ "$BOOT_VOLUMES" -ge 1 ]]; then
-    echo "✓ Boot volume detected"
-    echo "✓ Skipping directly to Stage 5 (boot/start only)"
-    RESUME_AT_STAGE_5=1
-else
-    echo "✓ No boot volume attached"
-    echo "✓ Running full workflow from the beginning"
-    RESUME_AT_STAGE_5=0
+###############################################################################
+# RESUME MODE: CAPTURE EXISTING ATTACHED VOLUMES FOR FAILURE MARKING
+###############################################################################
+if [[ "$RESUME_AT_STAGE_5" -eq 1 ]]; then
+    echo "→ Resume mode: capturing existing attached volumes..."
+
+    ATTACHED_VOLUMES_JSON=$(ibmcloud pi instance volume list "$SECONDARY_INSTANCE_ID" --json)
+
+    CLONE_BOOT_ID=$(echo "$ATTACHED_VOLUMES_JSON" \
+        | jq -r '.volumes[] | select(.bootable == true) | .volumeID' \
+        | head -n 1)
+
+    CLONE_DATA_IDS=$(echo "$ATTACHED_VOLUMES_JSON" \
+        | jq -r '.volumes[] | select(.bootable != true) | .volumeID' \
+        | paste -sd "," -)
+
+    echo "  Boot volume ID : ${CLONE_BOOT_ID}"
+    echo "  Data volume IDs: ${CLONE_DATA_IDS:-None}"
+    echo ""
 fi
+
 
 if [[ "$RESUME_AT_STAGE_5" -ne 1 ]]; then
 
