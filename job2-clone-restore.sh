@@ -289,6 +289,13 @@ if [[ "$BOOT_VOLUMES" -ge 1 ]]; then
     echo "✓ Boot volume detected"
     echo "✓ Skipping directly to Stage 5 (boot/start only)"
     RESUME_AT_STAGE_5=1
+else
+    echo "✓ No boot volume attached"
+    echo "✓ Running full workflow from the beginning"
+    RESUME_AT_STAGE_5=0
+fi
+
+if [[ "$RESUME_AT_STAGE_5" -ne 1 ]]; then
 
 
 
@@ -579,11 +586,8 @@ echo " Stage 4 Complete: Volumes attached and verified"
 echo "------------------------------------------------------------------------"
 echo ""
 
-else
-    echo "✓ No boot volume attached"
-    echo "✓ Running full workflow from the beginning"
-    RESUME_AT_STAGE_5=0
-fi
+fi  # ← closes "if [[ $RESUME_AT_STAGE_5 -ne 1 ]]"
+
 
 
 ################################################################################
