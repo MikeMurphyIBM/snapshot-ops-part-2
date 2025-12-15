@@ -56,10 +56,6 @@ readonly STORAGE_TIER="tier3"                     # Must match source tier
 # Naming Convention - Clone YYYY-MM-DD-HH-MM
 readonly CLONE_PREFIX="get-snapshot-$(date +"%Y%m%d%H%M")"
 
-#Code Engine Variable for Optional Stage
-readonly JOB_3_CLEANUP="snap-ops-3"
-
-
 # Polling Configuration
 readonly POLL_INTERVAL=30
 readonly INITIAL_WAIT=30
@@ -719,7 +715,7 @@ echo "========================================================================"
 echo ""
 
 if [[ "${RUN_CLEANUP_JOB:-No}" == "Yes" ]]; then
-    echo "→ Cleanup Environment=Yes detected - triggering Job 3..."
+    echo "→ Proceed to environment cleanup requested - triggering Job 3..."
     
     echo "  Switching to Code Engine project: IBMi..."
     ibmcloud ce project target --name IBMi > /dev/null 2>&1 || {
