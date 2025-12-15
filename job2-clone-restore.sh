@@ -764,13 +764,16 @@ sleep 3m
 ################################################################################
 # FINAL VALIDATION & SUMMARY
 ################################################################################
+
 echo ""
 echo "========================================================================"
 echo " JOB 2: COMPLETION SUMMARY"
 echo "========================================================================"
 echo ""
 
-# Final status readback (with error handling)
+# -------------------------------------------------------------------------
+# Final status readback
+# -------------------------------------------------------------------------
 set +e
 FINAL_CHECK=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null)
 FINAL_STATUS=$(echo "$FINAL_CHECK" | jq -r '.status // "UNKNOWN"' 2>/dev/null)
@@ -785,18 +788,22 @@ if [[ "$FINAL_STATUS" != "ACTIVE" ]]; then
     echo " FINAL STATE CHECK FAILED"
     echo "========================================================================"
     echo ""
-    echo "✗ Secondary LPAR did not reach ACTIVE state"
+    echo "✗ Secondary LPAR is NOT ACTIVE"
     echo "  Final status: ${FINAL_STATUS}"
     echo ""
     echo "✗ Job marked as FAILED — recovery artifacts preserved"
     echo ""
 
     FAILED_STAGE="FINAL_STATUS_CHECK"
+
+    # IMPORTANT:
+    # Do NOT set JOB_SUCCESS
+    # Exit non-zero to trigger cleanup_on_failure
     exit 1
 fi
 
 # -------------------------------------------------------------------------
-# Success summary
+# Success summary (ONLY runs if ACTIVE)
 # -------------------------------------------------------------------------
 echo "========================================================================"
 echo " JOB COMPLETED SUCCESSFULLY"
@@ -820,11 +827,15 @@ echo ""
 echo "========================================================================"
 echo ""
 
+# -------------------------------------------------------------------------
+# Mark job as successful ONLY HERE
+# -------------------------------------------------------------------------
 JOB_SUCCESS=1
 
-
-# Disable cleanup trap - job completed successfully
+# Disable cleanup trap — job fully succeeded
 trap - ERR EXIT
+
+
 
 ################################################################################
 # OPTIONAL STAGE: TRIGGER CLEANUP JOB (Job 3)
