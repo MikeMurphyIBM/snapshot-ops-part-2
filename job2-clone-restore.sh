@@ -719,7 +719,7 @@ echo "========================================================================"
 echo ""
 
 if [[ "${RUN_CLEANUP_JOB:-No}" == "Yes" ]]; then
-    echo "→ RUN_CLEANUP_JOB=Yes detected - triggering Job 3..."
+    echo "→ Cleanup Environment=Yes detected - triggering Job 3..."
     
     echo "  Switching to Code Engine project: IBMi..."
     ibmcloud ce project target --name IBMi > /dev/null 2>&1 || {
@@ -727,10 +727,10 @@ if [[ "${RUN_CLEANUP_JOB:-No}" == "Yes" ]]; then
         exit 1
     }
     
-    echo "  Submitting Code Engine job: prod-cleanup..."
+    echo "  Submitting Code Engine job: snap-ops-3..."
     
     RAW_SUBMISSION=$(ibmcloud ce jobrun submit \
-        --job "$JOB_3_CLEANUP" \
+        --job snap-ops-3 \
         --output json 2>&1)
     
     NEXT_RUN=$(echo "$RAW_SUBMISSION" | jq -r '.metadata.name // .name // empty' 2>/dev/null || true)
@@ -746,7 +746,7 @@ if [[ "${RUN_CLEANUP_JOB:-No}" == "Yes" ]]; then
     echo "✓ Job 3 (cleanup) triggered successfully"
     echo "  Jobrun instance: ${NEXT_RUN}"
 else
-    echo "→ RUN_CLEANUP_JOB not set - skipping Job 3"
+    echo "→ Proceed to Cleanup Environment not set - skipping Job 3"
     echo "  ${SECONDARY_LPAR} is ${FINAL_STATUS} and ready for BRMS Backup Operations "
 fi
 
