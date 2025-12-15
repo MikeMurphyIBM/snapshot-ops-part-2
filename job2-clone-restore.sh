@@ -282,6 +282,42 @@ echo " Stage 1 Complete: Authentication successful"
 echo "------------------------------------------------------------------------"
 echo ""
 
+###############################################################################
+# RESUME / GUARDRAIL CHECK
+###############################################################################
+
+echo "========================================================================"
+echo " Checking LPAR for already attached Boot volume"
+echo "========================================================================"
+echo ""
+
+INSTANCE_JSON=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json)
+
+STATUS=$(echo "$INSTANCE_JSON" | jq -r '.status')
+BOOT_VOLUMES=$(echo "$INSTANCE_JSON" | jq '[.volumes[] | select(.bootable == true)] | length')
+
+echo "  LPAR status          : ${STATUS}"
+echo "  Boot volumes attached: ${BOOT_VOLUMES}"
+echo ""
+
+if [[ "$STATUS" == "ACTIVE" ]]; then
+    echo "✓ LPAR already ACTIVE — no action required"
+    exit 0
+fi
+
+if [[ "$BOOT_VOLUMES" -ge 1 ]]; then
+    echo "✓ Boot volume detected"
+    echo "✓ Skipping directly to Stage 5"
+    RESUME_AT_STAGE_5=1
+else
+    echo "✓ No boot volume attached"
+    echo "✓ Running full workflow"
+    RESUME_AT_STAGE_5=0
+fi
+
+if [[ "$RESUME_AT_STAGE_5" -ne 1 ]]; then
+
+
 ################################################################################
 # STAGE 2: IDENTIFY VOLUMES ON PRIMARY LPAR
 # Logic:
@@ -578,6 +614,9 @@ echo " Stage 4 Complete: Volumes attached and verified"
 echo "------------------------------------------------------------------------"
 echo ""
 
+else
+    echo "→ Resume mode enabled — skipping Stages 1–4"
+fi
 ################################################################################
 # STAGE 5: BOOT SECONDARY LPAR
 # Logic:
