@@ -600,30 +600,104 @@ echo "  Current status: ${CURRENT_STATUS}"
 echo ""
 
 if [[ "$CURRENT_STATUS" != "ACTIVE" ]]; then
+
+    #
+    # ─────────────────────────────────────────────────────────────
+    # Step 1: Configure boot mode (retry once on failure)
+    # ─────────────────────────────────────────────────────────────
+    #
     echo "→ Configuring boot mode (NORMAL)..."
-    
-    ibmcloud pi instance operation "$SECONDARY_INSTANCE_ID" \
-        --operation-type boot \
-        --boot-mode a \
-        --boot-operating-mode normal \
-        >/dev/null 2>&1 || {
-            echo "✗ ERROR: Boot configuration failed"
-            exit 1
-        }
-    
-    echo "✓ Boot mode configured"
+
+    BOOTCFG_ATTEMPT=1
+    MAX_BOOTCFG_ATTEMPTS=2
+    BOOTCFG_SUCCESS=0
+
+    while [[ $BOOTCFG_ATTEMPT -le $MAX_BOOTCFG_ATTEMPTS ]]; do
+        echo "  Boot config attempt ${BOOTCFG_ATTEMPT}/${MAX_BOOTCFG_ATTEMPTS}"
+
+        BOOTCFG_OUTPUT=$(ibmcloud pi instance operation "$SECONDARY_INSTANCE_ID" \
+            --operation-type boot \
+            --boot-mode a \
+            --boot-operating-mode normal 2>&1)
+
+        echo "$BOOTCFG_OUTPUT"
+
+        if echo "$BOOTCFG_OUTPUT" | grep -q "Operation boot complete for instance"; then
+            echo "✓ Boot mode configured"
+            BOOTCFG_SUCCESS=1
+            break
+        fi
+
+        echo "⚠ Boot configuration did not complete successfully"
+
+        if [[ $BOOTCFG_ATTEMPT -lt $MAX_BOOTCFG_ATTEMPTS ]]; then
+            echo "→ Retrying boot configuration in 60 seconds..."
+            sleep 60
+        fi
+
+        BOOTCFG_ATTEMPT=$((BOOTCFG_ATTEMPT + 1))
+    done
+
+    if [[ $BOOTCFG_SUCCESS -ne 1 ]]; then
+        echo ""
+        echo "✗ ERROR: Boot configuration failed after ${MAX_BOOTCFG_ATTEMPTS} attempts"
+        echo "✗ Critical failure — volumes will NOT be detached or deleted"
+        exit 1
+    fi
+
     echo ""
-    
+
+    #
+    # ─────────────────────────────────────────────────────────────
+    # Step 2: Start LPAR (retry up to 3 attempts)
+    # ─────────────────────────────────────────────────────────────
+    #
     echo "→ Starting LPAR..."
-    
-    ibmcloud pi instance action "$SECONDARY_INSTANCE_ID" \
-        --operation start \
-        >/dev/null 2>&1 || {
-            echo "✗ ERROR: LPAR start command failed"
-            exit 1
-        }
-    
-    echo "✓ Start command accepted"
+
+    START_ATTEMPT=1
+    MAX_START_ATTEMPTS=3
+    START_SUCCESS=0
+
+    while [[ $START_ATTEMPT -le $MAX_START_ATTEMPTS ]]; do
+        echo "  Start attempt ${START_ATTEMPT}/${MAX_START_ATTEMPTS}"
+
+        START_OUTPUT=$(ibmcloud pi instance action "$SECONDARY_INSTANCE_ID" \
+            --operation start 2>&1)
+
+        if [[ $? -eq 0 ]]; then
+            echo "$START_OUTPUT"
+            echo "✓ Start command accepted"
+            START_SUCCESS=1
+            break
+        fi
+
+        STATUS=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null \
+            | jq -r '.status')
+
+        if [[ "$STATUS" == "STARTING" ]]; then
+            echo "✓ LPAR is already STARTING"
+            START_SUCCESS=1
+            break
+        fi
+
+        echo "⚠ Start failed:"
+        echo "$START_OUTPUT"
+
+        if [[ $START_ATTEMPT -lt $MAX_START_ATTEMPTS ]]; then
+            echo "→ Retrying start in 60 seconds..."
+            sleep 60
+        fi
+
+        START_ATTEMPT=$((START_ATTEMPT + 1))
+    done
+
+    if [[ $START_SUCCESS -ne 1 ]]; then
+        echo ""
+        echo "✗ ERROR: LPAR start failed after ${MAX_START_ATTEMPTS} attempts"
+        echo "✗ Critical failure — volumes will NOT be detached or deleted"
+        exit 1
+    fi
+
 else
     echo "  LPAR already ACTIVE - skipping boot sequence"
 fi
@@ -638,31 +712,34 @@ BOOT_ELAPSED=0
 while true; do
     STATUS=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null \
         | jq -r '.status')
-    
+
     echo "  LPAR status: ${STATUS} (elapsed: ${BOOT_ELAPSED}s)"
-    
+
     if [[ "$STATUS" == "ACTIVE" ]]; then
         echo ""
         echo "✓ LPAR is ACTIVE"
         JOB_SUCCESS=1
         break
     fi
-    
+
     if [[ "$STATUS" == "ERROR" ]]; then
         echo ""
         echo "✗ ERROR: LPAR entered ERROR state during boot"
+        echo "✗ Critical failure — volumes will NOT be detached or deleted"
         exit 1
     fi
-    
+
     if [[ $BOOT_ELAPSED -ge $MAX_BOOT_WAIT ]]; then
         echo ""
         echo "✗ ERROR: LPAR failed to reach ACTIVE state within $(($MAX_BOOT_WAIT/60)) minutes"
+        echo "✗ Critical failure — volumes will NOT be detached or deleted"
         exit 1
     fi
-    
+
     sleep "$POLL_INTERVAL"
     BOOT_ELAPSED=$((BOOT_ELAPSED + POLL_INTERVAL))
 done
+
 
 echo ""
 echo "------------------------------------------------------------------------"
