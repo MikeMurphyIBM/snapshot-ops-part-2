@@ -252,9 +252,31 @@ echo ""
 ###############################################################################
 
 echo "========================================================================"
-echo " Checking LPAR for already attached Boot volume"
+echo " Checking LPAR for existing attached Boot volume"
 echo "========================================================================"
 echo ""
+
+###############################################################################
+# ENSURE SECONDARY_INSTANCE_ID IS KNOWN (FOR RESUME CHECK)
+###############################################################################
+
+if [[ -z "${SECONDARY_INSTANCE_ID:-}" ]]; then
+    echo "→ Resolving secondary LPAR instance ID for resume check..."
+
+    SECONDARY_INSTANCE_ID=$(ibmcloud pi instance list --json 2>/dev/null \
+        | jq -r --arg N "$SECONDARY_LPAR" \
+          '.pvmInstances[]? | select(.name==$N) | .id' \
+        | head -n 1)
+
+    if [[ -z "$SECONDARY_INSTANCE_ID" || "$SECONDARY_INSTANCE_ID" == "null" ]]; then
+        echo "✓ Secondary LPAR does not exist yet"
+        echo "✓ Full workflow will be executed"
+        RESUME_AT_STAGE_5=0
+    else
+        echo "✓ Found secondary LPAR: ${SECONDARY_INSTANCE_ID}"
+    fi
+fi
+
 
 INSTANCE_JSON=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json)
 
