@@ -837,9 +837,13 @@ trap - ERR EXIT
 sleep 1
 
 
+
 ################################################################################
 # OPTIONAL STAGE: TRIGGER CLEANUP JOB (Job 3)
 ################################################################################
+
+set +e   # ← IMPORTANT: optional stage must not fail the job
+
 echo "========================================================================"
 echo " OPTIONAL STAGE: CHAIN TO CLEANUP PROCESS"
 echo "========================================================================"
@@ -848,44 +852,27 @@ echo ""
 if [[ "${RUN_CLEANUP_JOB:-No}" == "Yes" ]]; then
     echo "→ Environment cleanup requested - triggering Job 3..."
 
-    echo " targeting new resource group.."
-    ibmcloud target -g cloud-techsales
-    
-    echo "  Switching to Code Engine project: usnm-project..."
-    ibmcloud ce project target --name usnm-project > /dev/null 2>&1 || {
-        echo "✗ ERROR: Unable to target Code Engine project 'IBMi'"
-        exit 1
-    }
-    
-    echo "  Submitting Code Engine job: snap-ops-3..."
-    
+    echo "→ Targeting resource group cloud-techsales..."
+    ibmcloud target -g cloud-techsales || echo "⚠ Warning: target failed"
 
-RAW_SUBMISSION=$(ibmcloud ce jobrun submit \
-    --job snap-ops-3 \
-    --output json 2>&1 || true)
-RC=$?
+    echo "→ Switching to Code Engine project usnm-project..."
+    ibmcloud ce project target --name usnm-project || echo "⚠ Warning: CE target failed"
 
-if [[ $RC -ne 0 ]]; then
-    echo "  WARNING: jobrun submit returned rc=$RC"
-    echo "$RAW_SUBMISSION"
+    echo "→ Submitting cleanup job..."
+    RAW_SUBMISSION=$(ibmcloud ce jobrun submit \
+        --job snap-ops-3 \
+        --output json 2>&1)
+
+    NEXT_RUN=$(echo "$RAW_SUBMISSION" | jq -r '.metadata.name // empty')
+
+    if [[ -n "$NEXT_RUN" ]]; then
+        echo "✓ Cleanup job submitted: $NEXT_RUN"
+    else
+        echo "⚠ Cleanup job submission did not return a jobrun name"
+        echo "$RAW_SUBMISSION"
+    fi
+else
+    echo "→ Cleanup job not requested"
 fi
 
-NEXT_RUN=$(echo "$RAW_SUBMISSION" | jq -r '.metadata.name // .name // empty' 2>/dev/null || true)
-
-if [[ -z "$NEXT_RUN" ]]; then
-    echo "✗ ERROR: Job submission failed - no jobrun name returned"
-    echo ""
-    echo "Raw output:"
-    echo "$RAW_SUBMISSION"
-    exit 1
-fi
-
-echo "✓ Environment Cleanup triggered successfully"
-echo "  Jobrun instance: ${NEXT_RUN}"
-
-
-echo ""
-echo "========================================================================"
-echo ""
-
-exit 0
+set -e   # ← restore strict mode if anything follows
