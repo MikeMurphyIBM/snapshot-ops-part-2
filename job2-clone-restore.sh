@@ -44,17 +44,17 @@ readonly REGION="us-south"
 readonly RESOURCE_GROUP="Default"
 
 # PowerVS Workspace Configuration
-readonly PVS_CRN="crn:v1:bluemix:public:power-iaas:dal10:a/21d74dd4fe814dfca20570bbb93cdbff:cc84ef2f-babc-439f-8594-571ecfcbe57a::"
-readonly CLOUD_INSTANCE_ID="cc84ef2f-babc-439f-8594-571ecfcbe57a"
+readonly PVS_CRN="crn:v1:bluemix:public:power-iaas:dal10:a/db1a8b544a184fd7ac339c243684a9b7:973f4d55-9056-4848-8ed0-4592093161d2::" #workspace crn
+readonly CLOUD_INSTANCE_ID="973f4d55-9056-4848-8ed0-4592093161d2" #workspace ID
 
 # LPAR Configuration
-readonly PRIMARY_LPAR="get-snapshot"              # Source LPAR for cloning
-readonly PRIMARY_INSTANCE_ID="113196d1-1ee2-4815-8cfe-14df1ddedb59"
-readonly SECONDARY_LPAR="empty-ibmi-lpar"               # Target LPAR for restore
+readonly PRIMARY_LPAR="murphy-prod"              # Source LPAR for cloning
+readonly PRIMARY_INSTANCE_ID="fea64706-1929-41c9-a761-68c43a8f29cc"
+readonly SECONDARY_LPAR="murphy-prod-clone"               # Target LPAR for restore
 readonly STORAGE_TIER="tier3"                     # Must match source tier
 
 # Naming Convention - Clone YYYY-MM-DD-HH-MM
-readonly CLONE_PREFIX="get-snapshot-$(date +"%Y%m%d%H%M")"
+readonly CLONE_PREFIX="murphy-prod-$(date +"%Y%m%d%H%M")"
 
 # Polling Configuration
 readonly POLL_INTERVAL=30
