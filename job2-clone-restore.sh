@@ -622,6 +622,7 @@ fi  # ← closes "if [[ $RESUME_AT_STAGE_5 -ne 1 ]]"
 #   3. Poll status until ACTIVE or timeout
 #   4. Handle ERROR state as failure
 ################################################################################
+
 echo "========================================================================"
 echo " STAGE 5/5: BOOT SECONDARY LPAR"
 echo "========================================================================"
@@ -641,127 +642,108 @@ if [[ $RC -ne 0 || -z "$INSTANCE_JSON" ]]; then
 fi
 
 CURRENT_STATUS=$(echo "$INSTANCE_JSON" | jq -r '.status // "UNKNOWN"')
-
 echo "  Current status: ${CURRENT_STATUS}"
 echo ""
 
+if [[ "$CURRENT_STATUS" != "ACTIVE" ]]; then
 
-    #
-    # ─────────────────────────────────────────────────────────────
-    # Step 1: Configure boot mode (retry once on failure)
-    # ─────────────────────────────────────────────────────────────
-    #
     echo "→ Configuring boot mode (NORMAL)..."
 
     BOOTCFG_ATTEMPT=1
-    MAX_BOOTCFG_ATTEMPTS=2
     BOOTCFG_SUCCESS=0
 
-    while [[ $BOOTCFG_ATTEMPT -le $MAX_BOOTCFG_ATTEMPTS ]]; do
-        echo "  Boot config attempt ${BOOTCFG_ATTEMPT}/${MAX_BOOTCFG_ATTEMPTS}"
+    while [[ $BOOTCFG_ATTEMPT -le 2 ]]; do
+        echo "  Boot config attempt ${BOOTCFG_ATTEMPT}/2"
 
+        set +e
         BOOTCFG_OUTPUT=$(ibmcloud pi instance operation "$SECONDARY_INSTANCE_ID" \
             --operation-type boot \
             --boot-mode a \
             --boot-operating-mode normal 2>&1)
+        RC=$?
+        set -e
 
         echo "$BOOTCFG_OUTPUT"
 
-        if echo "$BOOTCFG_OUTPUT" | grep -q "Operation boot complete for instance"; then
+        if [[ $RC -eq 0 ]]; then
             echo "✓ Boot mode configured"
             BOOTCFG_SUCCESS=1
             break
         fi
 
-        echo "⚠ Boot configuration did not complete successfully"
-
-        if [[ $BOOTCFG_ATTEMPT -lt $MAX_BOOTCFG_ATTEMPTS ]]; then
-            echo "→ Retrying boot configuration in 60 seconds..."
-            sleep 60
-        fi
-
+        sleep 60
         BOOTCFG_ATTEMPT=$((BOOTCFG_ATTEMPT + 1))
     done
 
-        if [[ $BOOTCFG_SUCCESS -ne 1 ]]; then
-            echo ""
-            echo "✗ ERROR: Boot configuration failed after ${MAX_BOOTCFG_ATTEMPTS} attempts"
-            echo "✗ Critical failure — volumes will NOT be detached or deleted"
-            FAILED_STAGE="BOOT_CONFIG"
-            exit 1
-        fi
+    if [[ $BOOTCFG_SUCCESS -ne 1 ]]; then
+        FAILED_STAGE="BOOT_CONFIG"
+        exit 1
+    fi
 
-
-    echo ""
-
-    #
-    # ─────────────────────────────────────────────────────────────
-    # Step 2: Start LPAR (retry up to 3 attempts)
-    # ─────────────────────────────────────────────────────────────
-    #
-    # ─────────────────────────────────────────────────────────────
-    # Step 2: Start LPAR (retry up to 3 attempts)
-    # ─────────────────────────────────────────────────────────────
     echo "→ Starting LPAR..."
 
     START_ATTEMPT=1
-    MAX_START_ATTEMPTS=3
     START_SUCCESS=0
 
-    while [[ $START_ATTEMPT -le $MAX_START_ATTEMPTS ]]; do
-        echo "  Start attempt ${START_ATTEMPT}/${MAX_START_ATTEMPTS}"
+    while [[ $START_ATTEMPT -le 3 ]]; do
+        echo "  Start attempt ${START_ATTEMPT}/3"
 
-        # Disable exit-on-error ONLY for start command
         set +e
         START_OUTPUT=$(ibmcloud pi instance action "$SECONDARY_INSTANCE_ID" \
-        --operation start 2>&1)
-        START_RC=$?
+            --operation start 2>&1)
+        RC=$?
         set -e
 
-        # Case 1: CLI accepted the start command
-        if [[ $START_RC -eq 0 ]]; then
-            echo "$START_OUTPUT"
+        echo "$START_OUTPUT"
+
+        if [[ $RC -eq 0 ]]; then
             echo "✓ Start command accepted"
             START_SUCCESS=1
             break
         fi
 
-        # Case 2: Instance already transitioning
-            STATUS=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null \
-            | jq -r '.status // "UNKNOWN"')
-
-        if [[ "$STATUS" == "STARTING" ]]; then
-            echo "✓ LPAR is already STARTING"
-            START_SUCCESS=1
-            break
-        fi
-
-        # Failure case
-        echo "⚠ Start failed (rc=${START_RC}):"
-        echo "$START_OUTPUT"
-
-        if [[ $START_ATTEMPT -lt $MAX_START_ATTEMPTS ]]; then
-            echo "→ Retrying start in 60 seconds..."
-            sleep 60
-        fi
-
+        sleep 60
         START_ATTEMPT=$((START_ATTEMPT + 1))
     done
 
-    # Final failure gate
     if [[ $START_SUCCESS -ne 1 ]]; then
-        echo ""
-        echo "✗ ERROR: LPAR start failed after ${MAX_START_ATTEMPTS} attempts"
+        FAILED_STAGE="STARTUP"
+        exit 1
+    fi
+fi
+
+echo ""
+echo "→ Waiting for LPAR to reach ACTIVE state..."
+echo ""
+
+BOOT_ELAPSED=0
+
+while [[ $BOOT_ELAPSED -lt $MAX_BOOT_WAIT ]]; do
+    set +e
+    STATUS=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null \
+        | jq -r '.status // "UNKNOWN"')
+    set -e
+
+    echo "  LPAR status: ${STATUS} (elapsed ${BOOT_ELAPSED}s)"
+
+    if [[ "$STATUS" == "ACTIVE" ]]; then
+        echo "✓ LPAR is ACTIVE"
+        break
+    fi
+
+    if [[ "$STATUS" == "ERROR" ]]; then
         FAILED_STAGE="STARTUP"
         exit 1
     fi
 
+    sleep "$POLL_INTERVAL"
+    BOOT_ELAPSED=$((BOOT_ELAPSED + POLL_INTERVAL))
+done
 
-
-        sleep "$POLL_INTERVAL"
-        BOOT_ELAPSED=$((BOOT_ELAPSED + POLL_INTERVAL))
-    done
-
+if [[ "$STATUS" != "ACTIVE" ]]; then
+    FAILED_STAGE="STARTUP"
+    exit 1
+fi
 
 echo ""
 echo "------------------------------------------------------------------------"
@@ -769,12 +751,13 @@ echo " Stage 5 Complete: LPAR booted successfully"
 echo "------------------------------------------------------------------------"
 echo ""
 
-echo ""
-echo "------------------------------------------------------------------------"
-echo " Waiting 3 minutes for LPAR stabilization..."
-echo "------------------------------------------------------------------------"
-echo ""
-sleep 180
+
+#echo ""
+#echo "------------------------------------------------------------------------"
+#echo " Waiting 3 minutes for LPAR stabilization..."
+#echo "------------------------------------------------------------------------"
+#echo ""
+#sleep 180
 
 ################################################################################
 # FINAL VALIDATION & SUMMARY
