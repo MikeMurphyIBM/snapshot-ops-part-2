@@ -837,11 +837,6 @@ trap - ERR EXIT
 sleep 1
 
 
-
-
-
-
-
 ################################################################################
 # OPTIONAL STAGE: TRIGGER CLEANUP JOB (Job 3)
 ################################################################################
@@ -864,26 +859,30 @@ if [[ "${RUN_CLEANUP_JOB:-No}" == "Yes" ]]; then
     
     echo "  Submitting Code Engine job: snap-ops-3..."
     
-    RAW_SUBMISSION=$(ibmcloud ce jobrun submit \
-        --job snap-ops-3 \
-        --output json 2>&1)
-    
-    NEXT_RUN=$(echo "$RAW_SUBMISSION" | jq -r '.metadata.name // .name // empty' 2>/dev/null || true)
-    
-    if [[ -z "$NEXT_RUN" ]]; then
-        echo "✗ ERROR: Job submission failed - no jobrun name returned"
-        echo ""
-        echo "Raw output:"
-        echo "$RAW_SUBMISSION"
-        exit 1
-    fi
-    
-    echo "✓ Environment Cleanup triggered successfully"
-    echo "  Jobrun instance: ${NEXT_RUN}"
-else
-    echo "→ Proceed to Environment Cleanup not requested"
-    echo "  ${SECONDARY_LPAR} is ${FINAL_STATUS} and ready for BRMS Backup Operations "
+
+RAW_SUBMISSION=$(ibmcloud ce jobrun submit \
+    --job snap-ops-3 \
+    --output json 2>&1 || true)
+RC=$?
+
+if [[ $RC -ne 0 ]]; then
+    echo "  WARNING: jobrun submit returned rc=$RC"
+    echo "$RAW_SUBMISSION"
 fi
+
+NEXT_RUN=$(echo "$RAW_SUBMISSION" | jq -r '.metadata.name // .name // empty' 2>/dev/null || true)
+
+if [[ -z "$NEXT_RUN" ]]; then
+    echo "✗ ERROR: Job submission failed - no jobrun name returned"
+    echo ""
+    echo "Raw output:"
+    echo "$RAW_SUBMISSION"
+    exit 1
+fi
+
+echo "✓ Environment Cleanup triggered successfully"
+echo "  Jobrun instance: ${NEXT_RUN}"
+
 
 echo ""
 echo "========================================================================"
