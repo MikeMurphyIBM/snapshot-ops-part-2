@@ -699,6 +699,9 @@ echo ""
     # Step 2: Start LPAR (retry up to 3 attempts)
     # ─────────────────────────────────────────────────────────────
     #
+    # ─────────────────────────────────────────────────────────────
+    # Step 2: Start LPAR (retry up to 3 attempts)
+    # ─────────────────────────────────────────────────────────────
     echo "→ Starting LPAR..."
 
     START_ATTEMPT=1
@@ -708,12 +711,14 @@ echo ""
     while [[ $START_ATTEMPT -le $MAX_START_ATTEMPTS ]]; do
         echo "  Start attempt ${START_ATTEMPT}/${MAX_START_ATTEMPTS}"
 
+        # Disable exit-on-error ONLY for start command
         set +e
         START_OUTPUT=$(ibmcloud pi instance action "$SECONDARY_INSTANCE_ID" \
-            --operation start 2>&1)
+        --operation start 2>&1)
         START_RC=$?
         set -e
 
+        # Case 1: CLI accepted the start command
         if [[ $START_RC -eq 0 ]]; then
             echo "$START_OUTPUT"
             echo "✓ Start command accepted"
@@ -721,8 +726,9 @@ echo ""
             break
         fi
 
-        STATUS=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null \
-            | jq -r '.status')
+        # Case 2: Instance already transitioning
+            STATUS=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null \
+            | jq -r '.status // "UNKNOWN"')
 
         if [[ "$STATUS" == "STARTING" ]]; then
             echo "✓ LPAR is already STARTING"
@@ -730,6 +736,7 @@ echo ""
             break
         fi
 
+        # Failure case
         echo "⚠ Start failed (rc=${START_RC}):"
         echo "$START_OUTPUT"
 
@@ -741,6 +748,7 @@ echo ""
         START_ATTEMPT=$((START_ATTEMPT + 1))
     done
 
+    # Final failure gate
     if [[ $START_SUCCESS -ne 1 ]]; then
         echo ""
         echo "✗ ERROR: LPAR start failed after ${MAX_START_ATTEMPTS} attempts"
@@ -749,9 +757,10 @@ echo ""
     fi
 
 
-    sleep "$POLL_INTERVAL"
-    BOOT_ELAPSED=$((BOOT_ELAPSED + POLL_INTERVAL))
-done
+
+        sleep "$POLL_INTERVAL"
+        BOOT_ELAPSED=$((BOOT_ELAPSED + POLL_INTERVAL))
+    done
 
 
 echo ""
