@@ -629,13 +629,22 @@ echo ""
 
 echo "→ Checking current LPAR status..."
 
-CURRENT_STATUS=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null \
-    | jq -r '.status')
+set +e
+INSTANCE_JSON=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null)
+RC=$?
+set -e
+
+if [[ $RC -ne 0 || -z "$INSTANCE_JSON" ]]; then
+    echo "✗ Unable to retrieve LPAR status"
+    FAILED_STAGE="STARTUP"
+    exit 1
+fi
+
+CURRENT_STATUS=$(echo "$INSTANCE_JSON" | jq -r '.status // "UNKNOWN"')
 
 echo "  Current status: ${CURRENT_STATUS}"
 echo ""
 
-if [[ "$CURRENT_STATUS" != "ACTIVE" ]]; then
 
     #
     # ─────────────────────────────────────────────────────────────
