@@ -610,6 +610,8 @@ echo " Stage 4 Complete: Volumes attached and verified"
 echo "------------------------------------------------------------------------"
 echo ""
 
+sleep 1m
+
 fi  # ← closes "if [[ $RESUME_AT_STAGE_5 -ne 1 ]]"
 
 
@@ -622,6 +624,7 @@ fi  # ← closes "if [[ $RESUME_AT_STAGE_5 -ne 1 ]]"
 #   3. Poll status until ACTIVE or timeout
 #   4. Handle ERROR state as failure
 ################################################################################
+
 
 echo "========================================================================"
 echo " STAGE 5/5: BOOT SECONDARY LPAR"
@@ -645,14 +648,16 @@ CURRENT_STATUS=$(echo "$INSTANCE_JSON" | jq -r '.status // "UNKNOWN"')
 echo "  Current status: ${CURRENT_STATUS}"
 echo ""
 
-if [[ "$CURRENT_STATUS" != "ACTIVE" ]]; then
+###############################################################################
+# BOOT CONFIGURATION (ONLY IF NOT ACTIVE)
+###############################################################################
 
+if [[ "$CURRENT_STATUS" != "ACTIVE" ]]; then
     echo "→ Configuring boot mode (NORMAL)..."
 
-    BOOTCFG_ATTEMPT=1
     BOOTCFG_SUCCESS=0
 
-    while [[ $BOOTCFG_ATTEMPT -le 2 ]]; do
+    for BOOTCFG_ATTEMPT in 1 2; do
         echo "  Boot config attempt ${BOOTCFG_ATTEMPT}/2"
 
         set +e
@@ -672,7 +677,6 @@ if [[ "$CURRENT_STATUS" != "ACTIVE" ]]; then
         fi
 
         sleep 60
-        BOOTCFG_ATTEMPT=$((BOOTCFG_ATTEMPT + 1))
     done
 
     if [[ $BOOTCFG_SUCCESS -ne 1 ]]; then
@@ -680,12 +684,16 @@ if [[ "$CURRENT_STATUS" != "ACTIVE" ]]; then
         exit 1
     fi
 
+    ############################################################################
+    # START LPAR (RETRYABLE, NO TRAPS)
+    ############################################################################
+
     echo "→ Starting LPAR..."
 
-    START_ATTEMPT=1
     START_SUCCESS=0
+    IN_START_RETRY=1   # <<< CRITICAL FLAG
 
-    while [[ $START_ATTEMPT -le 3 ]]; do
+    for START_ATTEMPT in 1 2 3; do
         echo "  Start attempt ${START_ATTEMPT}/3"
 
         set +e
@@ -702,14 +710,62 @@ if [[ "$CURRENT_STATUS" != "ACTIVE" ]]; then
             break
         fi
 
+        # Retryable failure handling
+        if echo "$START_OUTPUT" | grep -q "attaching_volume"; then
+            echo "⚠ Instance still attaching volumes — retrying"
+        else
+            echo "✗ Non-retryable start failure"
+            FAILED_STAGE="STARTUP"
+            unset IN_START_RETRY
+            exit 1
+        fi
+
         sleep 60
-        START_ATTEMPT=$((START_ATTEMPT + 1))
     done
+
+    unset IN_START_RETRY   # <<< EXIT RETRY MODE
 
     if [[ $START_SUCCESS -ne 1 ]]; then
         FAILED_STAGE="STARTUP"
         exit 1
     fi
+fi
+
+###############################################################################
+# WAIT FOR ACTIVE
+###############################################################################
+
+echo ""
+echo "→ Waiting for LPAR to reach ACTIVE state..."
+echo ""
+
+BOOT_ELAPSED=0
+
+while [[ $BOOT_ELAPSED -lt $MAX_BOOT_WAIT ]]; do
+    set +e
+    STATUS=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null \
+        | jq -r '.status // "UNKNOWN"')
+    set -e
+
+    echo "  LPAR status: ${STATUS} (elapsed ${BOOT_ELAPSED}s)"
+
+    if [[ "$STATUS" == "ACTIVE" ]]; then
+        echo "✓ LPAR is ACTIVE"
+        break
+    fi
+
+    if [[ "$STATUS" == "ERROR" ]]; then
+        FAILED_STAGE="STARTUP"
+        exit 1
+    fi
+
+    sleep "$POLL_INTERVAL"
+    BOOT_ELAPSED=$((BOOT_ELAPSED + POLL_INTERVAL))
+done
+
+if [[ "$STATUS" != "ACTIVE" ]]; then
+    FAILED_STAGE="STARTUP"
+    exit 1
 fi
 
 echo ""
