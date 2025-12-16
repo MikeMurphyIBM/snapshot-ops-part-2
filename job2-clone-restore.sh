@@ -853,9 +853,12 @@ echo ""
 
 if [[ "${RUN_CLEANUP_JOB:-No}" == "Yes" ]]; then
     echo "→ Environment cleanup requested - triggering Job 3..."
+
+    echo " targeting new resource group.."
+    ibmcloud target -g cloud-techsales
     
-    echo "  Switching to Code Engine project: IBMi..."
-    ibmcloud ce project target --name IBMi > /dev/null 2>&1 || {
+    echo "  Switching to Code Engine project: usnm-project..."
+    ibmcloud ce project target --name usnm-project > /dev/null 2>&1 || {
         echo "✗ ERROR: Unable to target Code Engine project 'IBMi'"
         exit 1
     }
