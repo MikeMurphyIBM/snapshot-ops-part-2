@@ -759,10 +759,9 @@ echo ""
 #echo ""
 #sleep 180
 
-################################################################################
+###############################################################################
 # FINAL VALIDATION & SUMMARY
-################################################################################
-
+###############################################################################
 
 echo ""
 echo "========================================================================"
@@ -770,7 +769,7 @@ echo " JOB 2: COMPLETION SUMMARY"
 echo "========================================================================"
 echo ""
 
-# Safely retrieve final status
+# --- Safely retrieve final status ---
 set +e
 INSTANCE_JSON=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null)
 RC=$?
@@ -779,7 +778,7 @@ set -e
 if [[ $RC -ne 0 || -z "$INSTANCE_JSON" ]]; then
     echo "✗ ERROR: Unable to retrieve final LPAR status"
     FAILED_STAGE="FINAL_STATUS_CHECK"
-    exit 1
+    exit 1   # EXIT trap WILL run
 fi
 
 FINAL_STATUS=$(echo "$INSTANCE_JSON" | jq -r '.status // "UNKNOWN"')
@@ -787,11 +786,7 @@ FINAL_STATUS=$(echo "$INSTANCE_JSON" | jq -r '.status // "UNKNOWN"')
 echo "→ Final LPAR status check: ${FINAL_STATUS}"
 echo ""
 
-
-
-# -------------------------------------------------------------------------
-# FAILURE PATH (this MUST allow cleanup trap to run)
-# -------------------------------------------------------------------------
+# --- FAILURE PATH ---
 if [[ "$FINAL_STATUS" != "ACTIVE" ]]; then
     echo ""
     echo "========================================================================"
@@ -801,16 +796,15 @@ if [[ "$FINAL_STATUS" != "ACTIVE" ]]; then
     echo "✗ Secondary LPAR did not remain ACTIVE"
     echo "  Final status: ${FINAL_STATUS}"
     echo ""
-    echo "✗ Job marked as FAILED — recovery artifacts preserved"
-    echo ""
 
     FAILED_STAGE="FINAL_STATUS_CHECK"
-    exit 1   # cleanup_on_failure WILL RUN
+    exit 1   # EXIT trap WILL run
 fi
 
-# -------------------------------------------------------------------------
-# SUCCESS PATH (ONLY HERE is the job successful)
-# -------------------------------------------------------------------------
+# ===========================
+# SUCCESS PATH (NO EXITS ABOVE THIS)
+# ===========================
+
 echo "========================================================================"
 echo " JOB COMPLETED SUCCESSFULLY"
 echo "========================================================================"
@@ -832,11 +826,15 @@ echo ""
 echo "========================================================================"
 echo ""
 
-# -------------------------------------------------------------------------
-# Mark job successful AND ONLY NOW disable cleanup
-# -------------------------------------------------------------------------
+# --- Mark success FIRST ---
 JOB_SUCCESS=1
+
+# --- Disable cleanup trap ONLY AFTER success ---
 trap - ERR EXIT
+
+# --- Now exit cleanly ---
+exit 0
+
 
 
 
