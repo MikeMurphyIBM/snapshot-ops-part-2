@@ -836,8 +836,7 @@ trap - ERR EXIT
 # --- Allow logger to flush ---
 sleep 1
 
-# --- Now exit cleanly ---
-exit 0
+
 
 
 
