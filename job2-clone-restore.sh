@@ -699,10 +699,13 @@ if [[ "$CURRENT_STATUS" != "ACTIVE" ]]; then
     while [[ $START_ATTEMPT -le $MAX_START_ATTEMPTS ]]; do
         echo "  Start attempt ${START_ATTEMPT}/${MAX_START_ATTEMPTS}"
 
+        set +e
         START_OUTPUT=$(ibmcloud pi instance action "$SECONDARY_INSTANCE_ID" \
             --operation start 2>&1)
+        START_RC=$?
+        set -e
 
-        if [[ $? -eq 0 ]]; then
+        if [[ $START_RC -eq 0 ]]; then
             echo "$START_OUTPUT"
             echo "✓ Start command accepted"
             START_SUCCESS=1
@@ -718,7 +721,7 @@ if [[ "$CURRENT_STATUS" != "ACTIVE" ]]; then
             break
         fi
 
-        echo "⚠ Start failed:"
+        echo "⚠ Start failed (rc=${START_RC}):"
         echo "$START_OUTPUT"
 
         if [[ $START_ATTEMPT -lt $MAX_START_ATTEMPTS ]]; then
@@ -732,48 +735,10 @@ if [[ "$CURRENT_STATUS" != "ACTIVE" ]]; then
     if [[ $START_SUCCESS -ne 1 ]]; then
         echo ""
         echo "✗ ERROR: LPAR start failed after ${MAX_START_ATTEMPTS} attempts"
-        echo "✗ Critical failure — volumes will NOT be detached or deleted"
         FAILED_STAGE="STARTUP"
         exit 1
     fi
 
-
-else
-    echo "  LPAR already ACTIVE - skipping boot sequence"
-fi
-
-echo ""
-echo "→ Waiting for LPAR to reach ACTIVE state..."
-echo "  (Max wait: $(($MAX_BOOT_WAIT/60)) minutes)"
-echo ""
-
-BOOT_ELAPSED=0
-
-while true; do
-    STATUS=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null \
-        | jq -r '.status')
-
-    echo "  LPAR status: ${STATUS} (elapsed: ${BOOT_ELAPSED}s)"
-
-    if [[ "$STATUS" == "ACTIVE" ]]; then
-        echo ""
-        echo "✓ LPAR is ACTIVE"
-        break
-    fi
-
-    if [[ "$STATUS" == "ERROR" ]]; then
-        echo ""
-        echo "✗ ERROR: LPAR entered ERROR state during boot"
-        FAILED_STAGE="STARTUP"
-        exit 1
-    fi
-
-    if [[ $BOOT_ELAPSED -ge $MAX_BOOT_WAIT ]]; then
-        echo ""
-        echo "✗ ERROR: LPAR failed to reach ACTIVE state within $(($MAX_BOOT_WAIT/60)) minutes"
-        FAILED_STAGE="STARTUP"
-        exit 1
-    fi
 
     sleep "$POLL_INTERVAL"
     BOOT_ELAPSED=$((BOOT_ELAPSED + POLL_INTERVAL))
