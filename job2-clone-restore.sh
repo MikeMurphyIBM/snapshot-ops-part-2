@@ -826,8 +826,55 @@ echo ""
 echo "========================================================================"
 echo ""
 
+
+
+
+################################################################################
+# OPTIONAL STAGE: TRIGGER CLEANUP JOB (Job 3)
+################################################################################
+echo "========================================================================"
+echo " OPTIONAL STAGE: CHAIN TO CLEANUP PROCESS"
+echo "========================================================================"
+echo ""
+
+if [[ "${RUN_CLEANUP_JOB:-No}" == "Yes" ]]; then
+    echo "→ Proceed to Environment Cleanup has been requested - triggering Job 3..."
+
+    echo " targeting new resource group.."
+    ibmcloud target -g cloud-techsales || {
+        echo "⚠ WARNING: Unable to target resource group"
+    }
+
+    echo "  Switching to Code Engine project: usnm-project..."
+    ibmcloud ce project target --name usnm-project > /dev/null 2>&1 || {
+        echo "⚠ WARNING: Unable to target Code Engine project 'usnm-project'"
+    }
+
+    echo "  Submitting Code Engine job: snap-ops-3..."
+
+    # Capture output but do not fail job
+    RAW_SUBMISSION=$(ibmcloud ce jobrun submit \
+        --job snap-ops-3 \
+        --output json 2>&1 || true)
+
+    NEXT_RUN=$(echo "$RAW_SUBMISSION" | jq -r '.metadata.name // .name // empty' 2>/dev/null || true)
+
+    if [[ -z "$NEXT_RUN" ]]; then
+        echo "⚠ WARNING: Cleanup job submission did not return a jobrun name"
+        echo ""
+        echo "Raw output:"
+        echo "$RAW_SUBMISSION"
+    else
+        echo "✓ Environment Cleanup triggered successfully"
+        echo "  Jobrun instance: ${NEXT_RUN}"
+    fi
+else
+    echo "→ Proceed to Environment Cleanup not set - skipping Job 3"
+    echo "  ${SECONDARY_LPAR} is ${FINAL_STATUS} and ready for BRMS Backup Operations"
+fi
+
 # --- Mark success FIRST ---
-JOB_SUCCESS=1
+JOB_SUCCESS=0
 
 # --- Disable cleanup trap ONLY AFTER success ---
 trap - ERR EXIT
@@ -837,42 +884,8 @@ trap - ERR EXIT
 sleep 1
 
 
-
-################################################################################
-# OPTIONAL STAGE: TRIGGER CLEANUP JOB (Job 3)
-################################################################################
-
-set +e   # ← IMPORTANT: optional stage must not fail the job
-
-echo "========================================================================"
-echo " OPTIONAL STAGE: CHAIN TO CLEANUP PROCESS"
+echo ""
 echo "========================================================================"
 echo ""
 
-if [[ "${RUN_CLEANUP_JOB:-No}" == "Yes" ]]; then
-    echo "→ Environment cleanup requested - triggering Job 3..."
-
-    echo "→ Targeting resource group cloud-techsales..."
-    ibmcloud target -g cloud-techsales || echo "⚠ Warning: target failed"
-
-    echo "→ Switching to Code Engine project usnm-project..."
-    ibmcloud ce project target --name usnm-project || echo "⚠ Warning: CE target failed"
-
-    echo "→ Submitting cleanup job..."
-    RAW_SUBMISSION=$(ibmcloud ce jobrun submit \
-        --job snap-ops-3 \
-        --output json 2>&1)
-
-    NEXT_RUN=$(echo "$RAW_SUBMISSION" | jq -r '.metadata.name // empty')
-
-    if [[ -n "$NEXT_RUN" ]]; then
-        echo "✓ Cleanup job submitted: $NEXT_RUN"
-    else
-        echo "⚠ Cleanup job submission did not return a jobrun name"
-        echo "$RAW_SUBMISSION"
-    fi
-else
-    echo "→ Cleanup job not requested"
-fi
-
-set -e   # ← restore strict mode if anything follows
+exit 0
