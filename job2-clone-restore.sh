@@ -763,22 +763,31 @@ echo ""
 # FINAL VALIDATION & SUMMARY
 ################################################################################
 
+
 echo ""
 echo "========================================================================"
 echo " JOB 2: COMPLETION SUMMARY"
 echo "========================================================================"
 echo ""
 
-# -------------------------------------------------------------------------
-# Final status readback (temporarily disable error handling)
-# -------------------------------------------------------------------------
+# Safely retrieve final status
 set +e
-FINAL_CHECK=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null)
-FINAL_STATUS=$(echo "$FINAL_CHECK" | jq -r '.status // "UNKNOWN"' 2>/dev/null)
+INSTANCE_JSON=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null)
+RC=$?
 set -e
+
+if [[ $RC -ne 0 || -z "$INSTANCE_JSON" ]]; then
+    echo "✗ ERROR: Unable to retrieve final LPAR status"
+    FAILED_STAGE="FINAL_STATUS_CHECK"
+    exit 1
+fi
+
+FINAL_STATUS=$(echo "$INSTANCE_JSON" | jq -r '.status // "UNKNOWN"')
 
 echo "→ Final LPAR status check: ${FINAL_STATUS}"
 echo ""
+
+
 
 # -------------------------------------------------------------------------
 # FAILURE PATH (this MUST allow cleanup trap to run)
