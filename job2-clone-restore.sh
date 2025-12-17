@@ -949,7 +949,7 @@ trap - ERR EXIT
 
 
 # --- Allow logger to flush ---
-sleep 60
+sleep 60     #dont use 1m
 
 
 echo ""
