@@ -391,10 +391,15 @@ else
     PRIMARY_VOLUME_IDS="${PRIMARY_BOOT_ID}"
 fi
 
+# Count total volumes
+IFS=',' read -ra _VOLS <<<"$PRIMARY_VOLUME_IDS"
+TOTAL_VOLUME_COUNT=${#_VOLS[@]}
+
+
 echo "✓ Volumes identified on primary LPAR"
 echo "  Boot volume:  ${PRIMARY_BOOT_ID}"
 echo "  Data volumes: ${PRIMARY_DATA_IDS:-None}"
-echo "  Total volumes to clone: ${PRIMARY_VOLUME_IDS}"
+echo "  Total volumes to clone: ${TOTAL_VOLUME_COUNT}"
 
 
 
