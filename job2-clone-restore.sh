@@ -609,7 +609,9 @@ while true; do
     ELAPSED=$((ELAPSED + POLL_INTERVAL))
 done
 
+echo ""
 echo "Pausing 60 seconds to allow logs to sync.."
+echo ""
 sleep 60s
 
 echo ""
