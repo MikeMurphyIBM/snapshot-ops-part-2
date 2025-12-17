@@ -568,8 +568,12 @@ IFS=',' read -ra DATA_VOLS <<<"$CLONE_DATA_IDS"
 
 for VOL in "${DATA_VOLS[@]}"; do
     [[ -z "$VOL" ]] && continue
-    ...
+    if ! grep -q "$VOL" <<<"$VOL_LIST"; then
+        DATA_ATTACHED=false
+        break
+    fi
 done
+
 
 
 ELAPSED=0
@@ -780,38 +784,6 @@ if [[ "$STATUS" != "ACTIVE" ]]; then
     exit 1
 fi
 
-echo ""
-echo "→ Waiting for LPAR to reach ACTIVE state..."
-echo ""
-
-BOOT_ELAPSED=0
-
-while [[ $BOOT_ELAPSED -lt $MAX_BOOT_WAIT ]]; do
-    set +e
-    STATUS=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null \
-        | jq -r '.status // "UNKNOWN"')
-    set -e
-
-    echo "  LPAR status: ${STATUS} (elapsed ${BOOT_ELAPSED}s)"
-
-    if [[ "$STATUS" == "ACTIVE" ]]; then
-        echo "✓ LPAR is ACTIVE"
-        break
-    fi
-
-    if [[ "$STATUS" == "ERROR" ]]; then
-        FAILED_STAGE="STARTUP"
-        exit 1
-    fi
-
-    sleep "$POLL_INTERVAL"
-    BOOT_ELAPSED=$((BOOT_ELAPSED + POLL_INTERVAL))
-done
-
-if [[ "$STATUS" != "ACTIVE" ]]; then
-    FAILED_STAGE="STARTUP"
-    exit 1
-fi
 
 echo ""
 echo "------------------------------------------------------------------------"
