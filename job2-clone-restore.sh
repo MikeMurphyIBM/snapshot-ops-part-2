@@ -564,15 +564,6 @@ echo ""
 # --- Poll for attachment confirmation ---
 echo "→ Polling for volume attachment confirmation..."
 
-IFS=',' read -ra DATA_VOLS <<<"$CLONE_DATA_IDS"
-
-for VOL in "${DATA_VOLS[@]}"; do
-    [[ -z "$VOL" ]] && continue
-    if ! grep -q "$VOL" <<<"$VOL_LIST"; then
-        DATA_ATTACHED=false
-        break
-    fi
-done
 
 
 
@@ -594,7 +585,7 @@ while true; do
     # Check data volumes (if any)
     if [[ -n "$CLONE_DATA_IDS" ]]; then
         for VOL in ${CLONE_DATA_IDS//,/ }; do
-            if ! grep -q "$VOL" <<<"$VOL_LIST"; then    #########took out qx
+            if ! grep -qx "$VOL" <<<"$VOL_LIST"; then    #########took out qx
                 DATA_ATTACHED=false
                 break
             fi
@@ -619,7 +610,7 @@ while true; do
 done
 
 echo "Pausing 60 seconds to allow logs to sync.."
-Sleep 1m
+Sleep 60s
 
 echo ""
 echo "------------------------------------------------------------------------"
