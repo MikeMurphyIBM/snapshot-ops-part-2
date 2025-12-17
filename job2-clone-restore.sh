@@ -604,13 +604,15 @@ while true; do
     ELAPSED=$((ELAPSED + POLL_INTERVAL))
 done
 
+echo "Pausing 60 seconds to allow logs to sync.."
+Sleep 1m
+
 echo ""
 echo "------------------------------------------------------------------------"
 echo " Stage 4 Complete: Volumes attached and verified"
 echo "------------------------------------------------------------------------"
 echo ""
 
-sleep 1m
 
 fi  # ← closes "if [[ $RESUME_AT_STAGE_5 -ne 1 ]]"
 
