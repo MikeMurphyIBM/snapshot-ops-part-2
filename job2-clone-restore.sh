@@ -854,6 +854,44 @@ echo "  Secondary Instance ID:   ${SECONDARY_INSTANCE_ID}"
 echo "  Final Status:            ${FINAL_STATUS}"
 echo "  ────────────────────────────────────────────────────────────────"
 echo "  Volumes Cloned:          ✓ Yes"
+echo ""
+echo "  Boot Volume:"
+echo "    - ${CLONE_BOOT_ID}"
+echo ""
+
+echo "  Data Volumes:"
+if [[ -n "$CLONE_DATA_IDS" ]]; then
+    IFS=',' read -ra _DATA_VOLS <<<"$CLONE_DATA_IDS"
+    for VOL in "${_DATA_VOLS[@]}"; do
+        echo "    - ${VOL}"
+    done
+else
+    echo "    - None"
+fi
+unset _DATA_VOLS
+
+echo ""
+echo "  Volumes Attached:        ✓ Yes (${TOTAL_VOLUME_COUNT} total)"
+echo "  Boot Mode:               ✓ NORMAL (Mode A)"
+echo "  ────────────────────────────────────────────────────────────────"
+echo "  Clone Prefix:            ${CLONE_PREFIX}"
+echo ""
+echo "========================================================================"
+echo ""
+
+
+: <<'COMMENT'
+echo "========================================================================"
+echo " JOB COMPLETED SUCCESSFULLY"
+echo "========================================================================"
+echo ""
+echo "  Status:                  ✓ SUCCESS"
+echo "  Primary LPAR:            ${PRIMARY_LPAR}"
+echo "  Secondary LPAR:          ${SECONDARY_LPAR}"
+echo "  Secondary Instance ID:   ${SECONDARY_INSTANCE_ID}"
+echo "  Final Status:            ${FINAL_STATUS}"
+echo "  ────────────────────────────────────────────────────────────────"
+echo "  Volumes Cloned:          ✓ Yes"
 echo "  Boot Volume:             ${CLONE_BOOT_ID}"
 echo "  Data Volumes:            ${CLONE_DATA_IDS:-None}"
 echo "  Volumes Attached:        ✓ Yes"
@@ -863,7 +901,7 @@ echo "  Clone Prefix:            ${CLONE_PREFIX}"
 echo ""
 echo "========================================================================"
 echo ""
-
+COMMENT
 
 
 
@@ -909,7 +947,7 @@ if [[ "${RUN_CLEANUP_JOB:-No}" == "Yes" ]]; then
 else
     echo "→ Proceed to Environment Cleanup not set - skipping Job 3"
     echo "  ${SECONDARY_LPAR} is ${FINAL_STATUS} and the IPL is underway.."
-    echo " Will be ready for BRMS Backup Operations momentarily"
+    echo "  ....will be ready for BRMS Backup Operations momentarily"
 fi
 
 echo ""
