@@ -564,6 +564,14 @@ echo ""
 # --- Poll for attachment confirmation ---
 echo "→ Polling for volume attachment confirmation..."
 
+IFS=',' read -ra DATA_VOLS <<<"$CLONE_DATA_IDS"
+
+for VOL in "${DATA_VOLS[@]}"; do
+    [[ -z "$VOL" ]] && continue
+    ...
+done
+
+
 ELAPSED=0
 
 while true; do
@@ -574,7 +582,7 @@ while true; do
     BOOT_ATTACHED=false
     DATA_ATTACHED=true
 
-    # Check boot volume
+    ############ Check boot volume
     if grep -qx "$CLONE_BOOT_ID" <<<"$VOL_LIST"; then
         BOOT_ATTACHED=true
     fi
@@ -582,7 +590,7 @@ while true; do
     # Check data volumes (if any)
     if [[ -n "$CLONE_DATA_IDS" ]]; then
         for VOL in ${CLONE_DATA_IDS//,/ }; do
-            if ! grep -qx "$VOL" <<<"$VOL_LIST"; then
+            if ! grep -q "$VOL" <<<"$VOL_LIST"; then    #########took out qx
                 DATA_ATTACHED=false
                 break
             fi
@@ -941,7 +949,7 @@ trap - ERR EXIT
 
 
 # --- Allow logger to flush ---
-sleep 1
+sleep 60
 
 
 echo ""
