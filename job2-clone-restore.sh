@@ -58,8 +58,8 @@ readonly CLONE_PREFIX="murphy-prod-$(date +"%Y%m%d%H%M")"
 
 # Polling Configuration
 readonly POLL_INTERVAL=30
-readonly INITIAL_WAIT=30
-readonly MAX_ATTACH_WAIT=420
+readonly INITIAL_WAIT=60
+readonly MAX_ATTACH_WAIT=1800
 readonly MAX_BOOT_WAIT=1200
 
 # Runtime State Variables (Tracked for Cleanup)
