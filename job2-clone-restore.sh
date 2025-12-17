@@ -595,9 +595,11 @@ while true; do
     fi
 
     if (( ELAPSED >= MAX_ATTACH_WAIT )); then
+        FAILED_STAGE="ATTACH_VOLUME"
         echo "✗ ERROR: Volumes not attached after ${MAX_ATTACH_WAIT}s"
         exit 1
     fi
+
 
     echo "  Volumes not fully visible yet - checking again in ${POLL_INTERVAL}s..."
     sleep "$POLL_INTERVAL"
@@ -932,7 +934,7 @@ else
 fi
 
 # --- Mark success FIRST ---
-JOB_SUCCESS=0
+JOB_SUCCESS=1
 
 # --- Disable cleanup trap ONLY AFTER success ---
 trap - ERR EXIT
