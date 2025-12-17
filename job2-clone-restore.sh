@@ -51,7 +51,7 @@ readonly CLOUD_INSTANCE_ID="973f4d55-9056-4848-8ed0-4592093161d2" #workspace ID
 readonly PRIMARY_LPAR="murphy-prod"              # Source LPAR for cloning
 readonly PRIMARY_INSTANCE_ID="fea64706-1929-41c9-a761-68c43a8f29cc"
 readonly SECONDARY_LPAR="murphy-prod-clone"               # Target LPAR for restore
-readonly STORAGE_TIER="tier3"                     # Must match source tier
+#readonly STORAGE_TIER="tier3"                     # Must match source tier
 
 # Naming Convention - Clone YYYY-MM-DD-HH-MM
 readonly CLONE_PREFIX="murphy-prod-$(date +"%Y%m%d%H%M")"
@@ -417,13 +417,12 @@ echo ""
 
 echo "→ Submitting clone request..."
 echo "  Clone prefix: ${CLONE_PREFIX}"
-echo "  Storage tier: ${STORAGE_TIER}"
+#echo "  Storage tier: ${STORAGE_TIER}"
 echo "  Source volumes: ${PRIMARY_VOLUME_IDS}"
 
 CLONE_JSON=$(ibmcloud pi volume clone-async create "$CLONE_PREFIX" \
-    --target-tier "$STORAGE_TIER" \
-    --volumes "$PRIMARY_VOLUME_IDS" \
-    --json) || {
+        --volumes "$PRIMARY_VOLUME_IDS" \
+        --json) || {
         echo "✗ ERROR: Clone request failed"
         exit 1
 }
