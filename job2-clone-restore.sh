@@ -903,7 +903,8 @@ if [[ "${RUN_CLEANUP_JOB:-No}" == "Yes" ]]; then
     fi
 else
     echo "→ Proceed to Environment Cleanup not set - skipping Job 3"
-    echo "  ${SECONDARY_LPAR} is ${FINAL_STATUS} and the IPL is underway--will be ready for BRMS Backup Operations momentarily"
+    echo "  ${SECONDARY_LPAR} is ${FINAL_STATUS} and the IPL is underway.."
+    echo " Will be ready for BRMS Backup Operations momentarily"
 fi
 
 echo ""
