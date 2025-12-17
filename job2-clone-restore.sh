@@ -915,6 +915,8 @@ trap - ERR EXIT
 
 # --- Allow logger to flush ---
 sleep 60     #dont use 1m
+echo "Closing down Job 2, this will take approximately 60 seconds"
+echo ""
 
 
 echo ""
