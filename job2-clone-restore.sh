@@ -676,7 +676,7 @@ if [[ "$CURRENT_STATUS" != "ACTIVE" ]]; then
         set +e
         BOOTCFG_OUTPUT=$(ibmcloud pi instance operation "$SECONDARY_INSTANCE_ID" \
             --operation-type boot \
-            --boot-mode a \
+            --boot-mode b \
             --boot-operating-mode normal 2>&1)
         RC=$?
         set -e
