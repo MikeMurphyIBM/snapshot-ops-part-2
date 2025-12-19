@@ -370,23 +370,41 @@ sleep 3
 echo ""
 
 # ------------------------------------------------------------------------------
-# STAGE 3c: Clone Boot Volume
+# STAGE 3c: Clone All Volumes (Boot + Data) in Single Operation
 # ------------------------------------------------------------------------------
-FAILED_STAGE="CLONE_BOOT_VOLUME"
+FAILED_STAGE="CLONE_VOLUMES"
 
-echo "→ Stage 3c: Cloning boot volume..."
+echo "→ Stage 3c: Cloning all volumes in single operation..."
 echo ""
 
-BOOT_NAME="${CLONE_PREFIX}-boot"
-echo "  Clone name: ${BOOT_NAME}"
+# Combine boot and data volume IDs into single comma-separated list
+if [[ -n "$PRIMARY_DATA_IDS" ]]; then
+    ALL_VOLUME_IDS="${PRIMARY_BOOT_ID},${PRIMARY_DATA_IDS}"
+    VOLUME_COUNT=$((1 + $(echo "$PRIMARY_DATA_IDS" | tr ',' '\n' | wc -l | tr -d ' ')))
+else
+    ALL_VOLUME_IDS="${PRIMARY_BOOT_ID}"
+    VOLUME_COUNT=1
+fi
 
-CLONE_RESPONSE=$(ibmcloud pi volume clone-async create "$BOOT_NAME" \
-    --volumes "$PRIMARY_BOOT_ID" \
+echo "  Clone name: ${CLONE_PREFIX}"
+echo "  Volumes to clone: ${VOLUME_COUNT}"
+echo "    - Boot: ${PRIMARY_BOOT_ID}"
+if [[ -n "$PRIMARY_DATA_IDS" ]]; then
+    IFS=',' read -ra DATA_ARRAY <<<"$PRIMARY_DATA_IDS"
+    for vol in "${DATA_ARRAY[@]}"; do
+        echo "    - Data: ${vol}"
+    done
+fi
+echo ""
+
+# Initiate single clone operation for all volumes
+CLONE_RESPONSE=$(ibmcloud pi volume clone-async create "${CLONE_PREFIX}" \
+    --volumes "$ALL_VOLUME_IDS" \
     --json 2>/dev/null)
 
 CLONE_TASK_ID=$(echo "$CLONE_RESPONSE" | jq -r '.id')
 if [[ -z "$CLONE_TASK_ID" || "$CLONE_TASK_ID" == "null" ]]; then
-    echo "✗ ERROR: Could not initiate boot volume clone"
+    echo "✗ ERROR: Could not initiate volume clone"
     exit 1
 fi
 echo "  ✓ Clone task initiated: ${CLONE_TASK_ID}"
@@ -394,60 +412,34 @@ echo ""
 
 wait_for_clone_job "$CLONE_TASK_ID"
 
-# Extract cloned boot volume ID
-CLONE_BOOT_ID=$(ibmcloud pi volume clone-async get "$CLONE_TASK_ID" --json \
-    | jq -r '.clonedVolumes[0].volumeID')
+# Extract all cloned volume IDs from response
+CLONED_VOLUMES_JSON=$(ibmcloud pi volume clone-async get "$CLONE_TASK_ID" --json)
 
+# First cloned volume is boot, rest are data
+CLONE_BOOT_ID=$(echo "$CLONED_VOLUMES_JSON" | jq -r '.clonedVolumes[0].volumeID')
 if [[ -z "$CLONE_BOOT_ID" || "$CLONE_BOOT_ID" == "null" ]]; then
     echo "✗ ERROR: Could not retrieve cloned boot volume ID"
     exit 1
 fi
-echo "  ✓ Boot volume cloned successfully: ${CLONE_BOOT_ID}"
-echo ""
+echo "  ✓ Boot volume cloned: ${CLONE_BOOT_ID}"
 
-# ------------------------------------------------------------------------------
-# STAGE 3d: Clone Data Volumes (if any)
-# ------------------------------------------------------------------------------
-if [[ -n "$PRIMARY_DATA_IDS" ]]; then
-    FAILED_STAGE="CLONE_DATA_VOLUMES"
-    
-    echo "→ Stage 3d: Cloning data volumes..."
-    echo ""
-    
-    DATA_NAME="${CLONE_PREFIX}-data"
-    echo "  Clone name: ${DATA_NAME}"
-    
-    DATA_CLONE_RESPONSE=$(ibmcloud pi volume clone-async create "$DATA_NAME" \
-        --volumes "$PRIMARY_DATA_IDS" \
-        --json 2>/dev/null)
-    
-    DATA_TASK_ID=$(echo "$DATA_CLONE_RESPONSE" | jq -r '.id')
-    if [[ -z "$DATA_TASK_ID" || "$DATA_TASK_ID" == "null" ]]; then
-        echo "✗ ERROR: Could not initiate data volume clone"
-        exit 1
-    fi
-    echo "  ✓ Clone task initiated: ${DATA_TASK_ID}"
-    echo ""
-    
-    wait_for_clone_job "$DATA_TASK_ID"
-    
-    # Extract cloned data volume IDs
-    CLONE_DATA_IDS=$(ibmcloud pi volume clone-async get "$DATA_TASK_ID" --json \
-        | jq -r '[.clonedVolumes[].volumeID] | join(",")')
-    
+# Extract data volumes if any were cloned
+if [[ $VOLUME_COUNT -gt 1 ]]; then
+    CLONE_DATA_IDS=$(echo "$CLONED_VOLUMES_JSON" | jq -r '[.clonedVolumes[1:][].volumeID] | join(",")')
     if [[ -z "$CLONE_DATA_IDS" || "$CLONE_DATA_IDS" == "null" ]]; then
         echo "✗ ERROR: Could not retrieve cloned data volume IDs"
         exit 1
     fi
-    echo "  ✓ Data volumes cloned successfully"
-    echo ""
+    DATA_COUNT=$(echo "$CLONE_DATA_IDS" | tr ',' '\n' | wc -l | tr -d ' ')
+    echo "  ✓ Data volumes cloned: ${DATA_COUNT}"
 else
-    echo "→ No data volumes to clone - skipping"
-    echo ""
+    CLONE_DATA_IDS=""
+    echo "  ✓ No data volumes to clone"
 fi
+echo ""
 
 echo "------------------------------------------------------------------------"
-echo " Stage 3 Complete: IBMi prepared and volumes cloned"
+echo " Stage 3 Complete: IBMi prepared and all volumes cloned"
 echo "------------------------------------------------------------------------"
 echo ""
 
