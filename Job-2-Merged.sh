@@ -375,9 +375,16 @@ PRIMARY_BOOT_ID=$(echo "$PRIMARY_VOLUME_DATA" | jq -r '
 ' | head -n 1)
 
 # Extract data volume IDs (where bootVolume is false or null)
+set +e
 PRIMARY_DATA_IDS=$(echo "$PRIMARY_VOLUME_DATA" | jq -r '
     .volumes[]? | select(.bootVolume != true) | .volumeID
-' | paste -sd "," -)
+' 2>/dev/null | paste -sd "," - 2>/dev/null)
+set -e
+
+# Clean up empty result
+if [[ -z "$PRIMARY_DATA_IDS" || "$PRIMARY_DATA_IDS" == "" ]]; then
+    PRIMARY_DATA_IDS=""
+fi
 
 if [[ -z "$PRIMARY_BOOT_ID" ]]; then
     echo "✗ ERROR: No boot volume found on primary LPAR"
