@@ -247,67 +247,168 @@ echo " Stage 1 Complete: Authentication successful"
 echo "------------------------------------------------------------------------"
 echo ""
 
-################################################################################
-# STAGE 2: IDENTIFY PRIMARY VOLUMES
-################################################################################
-FAILED_STAGE="IDENTIFY_PRIMARY_VOLUMES"
+###############################################################################
+# RESUME / GUARDRAIL CHECK
+###############################################################################
 
 echo "========================================================================"
-echo " STAGE 2/5: IDENTIFY PRIMARY LPAR VOLUMES"
+echo " Checking LPAR for existing attached Boot volume"
 echo "========================================================================"
 echo ""
 
-echo "→ Retrieving volumes attached to primary LPAR: ${PRIMARY_LPAR}..."
+###############################################################################
+# ENSURE SECONDARY_INSTANCE_ID IS KNOWN (FOR RESUME CHECK)
+###############################################################################
 
-PRIMARY_JSON=$(ibmcloud pi instance get "$PRIMARY_INSTANCE_ID" --json 2>/dev/null)
-if [[ -z "$PRIMARY_JSON" ]]; then
-    echo "✗ ERROR: Could not retrieve primary LPAR details"
+echo "→ Resolving secondary LPAR instance ID..."
+
+SECONDARY_INSTANCE_ID=$(ibmcloud pi instance list --json 2>/dev/null \
+    | jq -r --arg N "$SECONDARY_LPAR" \
+      '.pvmInstances[] | select(.name==$N) | .id' \
+    | head -n 1)
+
+if [[ -z "$SECONDARY_INSTANCE_ID" || "$SECONDARY_INSTANCE_ID" == "null" ]]; then
+    echo "✗ ERROR: Secondary LPAR '${SECONDARY_LPAR}' not found"
     exit 1
 fi
 
-# Extract boot volume ID
-PRIMARY_BOOT_ID=$(echo "$PRIMARY_JSON" | jq -r '.volumeIDs[0]')
-if [[ -z "$PRIMARY_BOOT_ID" || "$PRIMARY_BOOT_ID" == "null" ]]; then
-    echo "✗ ERROR: Could not identify boot volume"
-    exit 1
-fi
-echo "✓ Boot volume identified: ${PRIMARY_BOOT_ID}"
+echo "✓ Secondary LPAR ID: ${SECONDARY_INSTANCE_ID}"
 
-# Extract data volumes (all volumes except boot)
-PRIMARY_DATA_IDS=$(echo "$PRIMARY_JSON" | jq -r '.volumeIDs[1:]? | join(",")')
-if [[ -n "$PRIMARY_DATA_IDS" && "$PRIMARY_DATA_IDS" != "null" ]]; then
-    DATA_COUNT=$(echo "$PRIMARY_DATA_IDS" | tr ',' '\n' | wc -l | tr -d ' ')
-    echo "✓ Data volumes identified: ${DATA_COUNT} volumes"
-else
-    PRIMARY_DATA_IDS=""
-    echo "  No additional data volumes found"
-fi
+echo "→ Checking attached volumes on secondary LPAR..."
 
+VOLUME_JSON=$(ibmcloud pi instance volume list "$SECONDARY_INSTANCE_ID" --json 2>/dev/null)
+
+BOOT_VOLUMES=$(echo "$VOLUME_JSON" | jq '[.volumes[] | select(.bootable == true)] | length')
+TOTAL_VOLUMES=$(echo "$VOLUME_JSON" | jq '.volumes | length')
+
+echo "  Total attached volumes: ${TOTAL_VOLUMES}"
+echo "  Bootable volumes       : ${BOOT_VOLUMES}"
 echo ""
-echo "  Primary LPAR Volume Summary:"
-echo "  ┌────────────────────────────────────────────────────────────"
-echo "  │ Boot Volume: ${PRIMARY_BOOT_ID}"
+
+###############################################################################
+# DECISION: SKIP TO STAGE 5 IF BOOT VOLUME ALREADY ATTACHED
+###############################################################################
+if [[ "$BOOT_VOLUMES" -gt 0 ]]; then
+    echo "⚠ Boot volume already attached - skipping clone/attach stages"
+    echo "  Resuming at Stage 5 (Boot LPAR)"
+    echo ""
+    RESUME_AT_STAGE_5=1
+fi
+
+###############################################################################
+# RESUME MODE: CAPTURE EXISTING ATTACHED VOLUMES FOR FAILURE MARKING
+###############################################################################
+if [[ "$RESUME_AT_STAGE_5" -eq 1 ]]; then
+    echo "→ Resume mode: capturing existing attached volumes..."
+
+    ATTACHED_VOLUMES_JSON=$(ibmcloud pi instance volume list "$SECONDARY_INSTANCE_ID" --json)
+
+    CLONE_BOOT_ID=$(echo "$ATTACHED_VOLUMES_JSON" \
+        | jq -r '.volumes[] | select(.bootable == true) | .volumeID' \
+        | head -n 1)
+
+    CLONE_DATA_IDS=$(echo "$ATTACHED_VOLUMES_JSON" \
+        | jq -r '.volumes[] | select(.bootable != true) | .volumeID' \
+        | paste -sd "," -)
+
+    echo "  Boot volume ID : ${CLONE_BOOT_ID}"
+    echo "  Data volume IDs: ${CLONE_DATA_IDS:-None}"
+    echo ""
+fi
+
+
+if [[ "$RESUME_AT_STAGE_5" -ne 1 ]]; then
+
+
+
+################################################################################
+# STAGE 2: IDENTIFY VOLUMES ON PRIMARY LPAR
+# Logic:
+#   1. Resolve secondary LPAR instance ID (needed for later stages)
+#   2. Query volumes attached to primary LPAR
+#   3. Parse JSON to identify boot vs data volumes
+#   4. Extract volume IDs for cloning
+################################################################################
+
+
+echo "========================================================================"
+echo " STAGE 2/5: IDENTIFY VOLUMES ON PRIMARY LPAR"
+echo "========================================================================"
+echo ""
+
+# -------------------------------------------------------------------------
+# STEP 1: Resolve secondary LPAR instance ID
+# -------------------------------------------------------------------------
+echo "→ Secondary LPAR resolved in previous step..."
+
+#SECONDARY_INSTANCE_ID=$(ibmcloud pi instance list --json \
+#    | jq -r ".pvmInstances[] | select(.name == \"$SECONDARY_LPAR\") | .id")
+
+#if [[ -z "$SECONDARY_INSTANCE_ID" ]]; then
+#    echo "✗ ERROR: Secondary LPAR not found: ${SECONDARY_LPAR}"
+#    exit 1
+#fi
+
+#echo "✓ Secondary LPAR found"
+echo "  Name: ${SECONDARY_LPAR}"
+echo "  Instance ID: ${SECONDARY_INSTANCE_ID}"
+echo ""
+
+# -------------------------------------------------------------------------
+# STEP 2: Query primary LPAR volumes
+# -------------------------------------------------------------------------
+echo "→ Querying volumes on primary LPAR: ${PRIMARY_LPAR}..."
+
+PRIMARY_VOLUME_DATA=$(ibmcloud pi ins vol ls "$PRIMARY_INSTANCE_ID" --json 2>/dev/null)
+
+
+# -------------------------------------------------------------------------
+# STEP 3: Extract boot and data volume IDs
+# -------------------------------------------------------------------------
+
+
+echo "→ Identifying boot and data volumes..."
+
+# Extract boot volume ID (where bootVolume is true)
+PRIMARY_BOOT_ID=$(echo "$PRIMARY_VOLUME_DATA" | jq -r '
+    .volumes[]? | select(.bootVolume == true) | .volumeID
+' | head -n 1)
+
+# Extract data volume IDs (where bootVolume is false or null)
+PRIMARY_DATA_IDS=$(echo "$PRIMARY_VOLUME_DATA" | jq -r '
+    .volumes[]? | select(.bootVolume != true) | .volumeID
+' | paste -sd "," -)
+
+if [[ -z "$PRIMARY_BOOT_ID" ]]; then
+    echo "✗ ERROR: No boot volume found on primary LPAR"
+    exit 1
+fi
+
+# Build complete volume ID list for cloning
 if [[ -n "$PRIMARY_DATA_IDS" ]]; then
-    echo "  │ Data Volumes:"
-    IFS=',' read -ra DATA_ARRAY <<<"$PRIMARY_DATA_IDS"
-    for vol in "${DATA_ARRAY[@]}"; do
-        echo "  │   - ${vol}"
-    done
+    PRIMARY_VOLUME_IDS="${PRIMARY_BOOT_ID},${PRIMARY_DATA_IDS}"
 else
-    echo "  │ Data Volumes: None"
+    PRIMARY_VOLUME_IDS="${PRIMARY_BOOT_ID}"
 fi
-echo "  └────────────────────────────────────────────────────────────"
+
+# Count total volumes
+IFS=',' read -ra _VOLS <<<"$PRIMARY_VOLUME_IDS"
+TOTAL_VOLUME_COUNT=${#_VOLS[@]}
+
+
+echo "✓ Volumes identified on primary LPAR"
+echo "  Boot volume:  ${PRIMARY_BOOT_ID}"
+echo "  Data volumes: ${PRIMARY_DATA_IDS:-None}"
+echo "  Total volumes to clone: ${TOTAL_VOLUME_COUNT}"
+
+
+
+echo ""
+echo "------------------------------------------------------------------------"
+echo " Stage 2 Complete: Volume identification complete"
+echo "------------------------------------------------------------------------"
 echo ""
 
-echo "------------------------------------------------------------------------"
-echo " Stage 2 Complete: Primary volumes identified"
-echo "------------------------------------------------------------------------"
-echo ""
-
-################################################################################
-# STAGE 3: SSH PREPARATION & VOLUME CLONING
-################################################################################
-FAILED_STAGE="IBMI_PREPARATION"
 
 echo "========================================================================"
 echo " STAGE 3/5: IBMi PREPARATION & VOLUME CLONING"
@@ -317,8 +418,7 @@ echo ""
 # ------------------------------------------------------------------------------
 # STAGE 3a: Install SSH Keys from Code Engine Secrets
 # ------------------------------------------------------------------------------
-echo "→ Stage 3a: Installing SSH keys from Code Engine secrets..."
-echo ""
+echo "→ Installing SSH keys from Code Engine secrets..."
 
 mkdir -p "$HOME/.ssh"
 chmod 700 "$HOME/.ssh"
@@ -342,14 +442,12 @@ fi
 echo "$id_ed25519_vsi" > "$IBMI_KEY_FILE"
 chmod 600 "$IBMI_KEY_FILE"
 echo "  ✓ IBMi SSH key installed"
-
 echo ""
 
 # ------------------------------------------------------------------------------
 # STAGE 3b: SSH to IBMi and Run Preparation Commands
 # ------------------------------------------------------------------------------
-echo "→ Stage 3b: Connecting to IBMi via VSI for disk preparation..."
-echo ""
+echo "→ Connecting to IBMi via VSI for disk preparation..."
 
 ssh -i "$VSI_KEY_FILE" \
   -o StrictHostKeyChecking=no \
@@ -370,232 +468,318 @@ sleep 3
 echo ""
 
 # ------------------------------------------------------------------------------
-# STAGE 3c: Clone All Volumes (Boot + Data) in Single Operation
+# STAGE 3c: Clone Volumes
 # ------------------------------------------------------------------------------
-FAILED_STAGE="CLONE_VOLUMES"
+echo "→ Submitting clone request..."
+echo "  Clone prefix: ${CLONE_PREFIX}"
+#echo "  Storage tier: ${STORAGE_TIER}"
+echo "  Source volumes: ${PRIMARY_VOLUME_IDS}"
 
-echo "→ Stage 3c: Cloning all volumes in single operation..."
-echo ""
+CLONE_JSON=$(ibmcloud pi volume clone-async create "$CLONE_PREFIX" \
+        --volumes "$PRIMARY_VOLUME_IDS" \
+        --json) || {
+        echo "✗ ERROR: Clone request failed"
+        exit 1
+}
 
-# Combine boot and data volume IDs into single comma-separated list
-if [[ -n "$PRIMARY_DATA_IDS" ]]; then
-    ALL_VOLUME_IDS="${PRIMARY_BOOT_ID},${PRIMARY_DATA_IDS}"
-    VOLUME_COUNT=$((1 + $(echo "$PRIMARY_DATA_IDS" | tr ',' '\n' | wc -l | tr -d ' ')))
-else
-    ALL_VOLUME_IDS="${PRIMARY_BOOT_ID}"
-    VOLUME_COUNT=1
-fi
+CLONE_TASK_ID=$(echo "$CLONE_JSON" | jq -r '.cloneTaskID')
 
-echo "  Clone name: ${CLONE_PREFIX}"
-echo "  Volumes to clone: ${VOLUME_COUNT}"
-echo "    - Boot: ${PRIMARY_BOOT_ID}"
-if [[ -n "$PRIMARY_DATA_IDS" ]]; then
-    IFS=',' read -ra DATA_ARRAY <<<"$PRIMARY_DATA_IDS"
-    for vol in "${DATA_ARRAY[@]}"; do
-        echo "    - Data: ${vol}"
-    done
-fi
-echo ""
-
-# Initiate single clone operation for all volumes
-CLONE_RESPONSE=$(ibmcloud pi volume clone-async create "${CLONE_PREFIX}" \
-    --volumes "$ALL_VOLUME_IDS" \
-    --json 2>/dev/null)
-
-CLONE_TASK_ID=$(echo "$CLONE_RESPONSE" | jq -r '.id')
 if [[ -z "$CLONE_TASK_ID" || "$CLONE_TASK_ID" == "null" ]]; then
-    echo "✗ ERROR: Could not initiate volume clone"
+    echo "✗ ERROR: cloneTaskID not returned"
+    echo "$CLONE_JSON"
     exit 1
 fi
-echo "  ✓ Clone task initiated: ${CLONE_TASK_ID}"
-echo ""
 
+echo "✓ Clone request submitted"
+echo "  Clone task ID: ${CLONE_TASK_ID}"
+
+
+# Wait for clone job to complete
 wait_for_clone_job "$CLONE_TASK_ID"
 
-# Extract all cloned volume IDs from response
-CLONED_VOLUMES_JSON=$(ibmcloud pi volume clone-async get "$CLONE_TASK_ID" --json)
+echo ""
+echo "→ Extracting cloned volume IDs..."
 
-# First cloned volume is boot, rest are data
-CLONE_BOOT_ID=$(echo "$CLONED_VOLUMES_JSON" | jq -r '.clonedVolumes[0].volumeID')
-if [[ -z "$CLONE_BOOT_ID" || "$CLONE_BOOT_ID" == "null" ]]; then
-    echo "✗ ERROR: Could not retrieve cloned boot volume ID"
-    exit 1
+CLONE_RESULT=$(ibmcloud pi volume clone-async get "$CLONE_TASK_ID" --json)
+
+# Extract boot volume clone
+CLONE_BOOT_ID=$(echo "$CLONE_RESULT" \
+  | jq -r --arg boot "$PRIMARY_BOOT_ID" '
+      .clonedVolumes[]
+      | select(.sourceVolumeID == $boot)
+      | .clonedVolumeID
+  ')
+
+# Extract data volume clones (if any)
+if [[ -n "$PRIMARY_DATA_IDS" ]]; then
+  CLONE_DATA_IDS=$(echo "$CLONE_RESULT" \
+    | jq -r --arg boot "$PRIMARY_BOOT_ID" '
+        .clonedVolumes[]
+        | select(.sourceVolumeID != $boot)
+        | .clonedVolumeID
+    ' | paste -sd "," -)
 fi
-echo "  ✓ Boot volume cloned: ${CLONE_BOOT_ID}"
 
-# Extract data volumes if any were cloned
-if [[ $VOLUME_COUNT -gt 1 ]]; then
-    CLONE_DATA_IDS=$(echo "$CLONED_VOLUMES_JSON" | jq -r '[.clonedVolumes[1:][].volumeID] | join(",")')
-    if [[ -z "$CLONE_DATA_IDS" || "$CLONE_DATA_IDS" == "null" ]]; then
-        echo "✗ ERROR: Could not retrieve cloned data volume IDs"
-        exit 1
+# Validation
+if [[ -z "$CLONE_BOOT_ID" ]]; then
+  echo "✗ ERROR: Failed to identify cloned boot volume"
+  echo "$CLONE_RESULT"
+  exit 1
+fi
+
+echo "✓ Cloned volume IDs extracted"
+echo "  Boot volume: ${CLONE_BOOT_ID}"
+echo "  Data volumes: ${CLONE_DATA_IDS:-None}"
+echo ""
+
+
+echo "→ Verifying cloned volumes are available..."
+
+# Verify boot volume
+while true; do
+    BOOT_STATUS=$(ibmcloud pi volume get "$CLONE_BOOT_ID" --json \
+        | jq -r '.state | ascii_downcase')
+    
+    if [[ "$BOOT_STATUS" == "available" ]]; then
+        echo "✓ Boot volume available: ${CLONE_BOOT_ID}"
+        break
     fi
-    DATA_COUNT=$(echo "$CLONE_DATA_IDS" | tr ',' '\n' | wc -l | tr -d ' ')
-    echo "  ✓ Data volumes cloned: ${DATA_COUNT}"
-else
-    CLONE_DATA_IDS=""
-    echo "  ✓ No data volumes to clone"
-fi
-echo ""
+    
+    echo "  Boot volume status: ${BOOT_STATUS} - waiting..."
+    sleep "$POLL_INTERVAL"
+done
 
-echo "------------------------------------------------------------------------"
-echo " Stage 3 Complete: IBMi prepared and all volumes cloned"
-echo "------------------------------------------------------------------------"
-echo ""
-
-################################################################################
-# STAGE 4: RESOLVE SECONDARY LPAR & ATTACH VOLUMES
-################################################################################
-FAILED_STAGE="RESOLVE_SECONDARY_LPAR"
-
-echo "========================================================================"
-echo " STAGE 4/5: RESOLVE SECONDARY LPAR & ATTACH VOLUMES"
-echo "========================================================================"
-echo ""
-
-echo "→ Resolving secondary LPAR instance ID: ${SECONDARY_LPAR}..."
-
-SECONDARY_INSTANCE_ID=$(ibmcloud pi instances --json 2>/dev/null \
-    | jq -r --arg name "$SECONDARY_LPAR" \
-    '.pvmInstances[]? | select(.name == $name) | .id' \
-    | head -n 1)
-
-if [[ -z "$SECONDARY_INSTANCE_ID" || "$SECONDARY_INSTANCE_ID" == "null" ]]; then
-    echo "✗ ERROR: Could not find secondary LPAR: ${SECONDARY_LPAR}"
-    exit 1
-fi
-echo "✓ Secondary LPAR resolved: ${SECONDARY_INSTANCE_ID}"
-echo ""
-
-# ------------------------------------------------------------------------------
-# Attach Boot Volume
-# ------------------------------------------------------------------------------
-FAILED_STAGE="ATTACH_BOOT_VOLUME"
-
-echo "→ Attaching boot volume to secondary LPAR..."
-
-ibmcloud pi instance attach "$SECONDARY_INSTANCE_ID" \
-    --volume "$CLONE_BOOT_ID" > /dev/null 2>&1 || {
-    echo "✗ ERROR: Failed to attach boot volume"
-    exit 1
-}
-echo "  ✓ Boot volume attached: ${CLONE_BOOT_ID}"
-echo ""
-
-# ------------------------------------------------------------------------------
-# Attach Data Volumes
-# ------------------------------------------------------------------------------
+# Verify data volumes (if any)
 if [[ -n "$CLONE_DATA_IDS" ]]; then
-    FAILED_STAGE="ATTACH_DATA_VOLUMES"
-    
-    echo "→ Attaching data volumes to secondary LPAR..."
-    
-    IFS=',' read -ra DATA_VOLS <<<"$CLONE_DATA_IDS"
-    for vol in "${DATA_VOLS[@]}"; do
-        echo "  Attaching: ${vol}..."
-        ibmcloud pi instance attach "$SECONDARY_INSTANCE_ID" \
-            --volume "$vol" > /dev/null 2>&1 || {
-            echo "✗ ERROR: Failed to attach volume ${vol}"
+    for VOL in ${CLONE_DATA_IDS//,/ }; do
+        while true; do
+            DATA_STATUS=$(ibmcloud pi volume get "$VOL" --json \
+                | jq -r '.state | ascii_downcase')
+            
+            if [[ "$DATA_STATUS" == "available" ]]; then
+                echo "✓ Data volume available: ${VOL}"
+                break
+            fi
+            
+            echo "  Data volume status: ${DATA_STATUS} - waiting..."
+            sleep "$POLL_INTERVAL"
+        done
+    done
+fi
+
+echo ""
+echo "------------------------------------------------------------------------"
+echo " Stage 3 Complete: All volumes cloned and verified available"
+echo "------------------------------------------------------------------------"
+echo ""
+
+################################################################################
+# STAGE 4: ATTACH VOLUMES TO SECONDARY LPAR
+# Logic:
+#   1. Attach boot volume and data volumes (if any)
+#   2. Wait for initial stabilization
+#   3. Poll until all volumes appear in instance volume list
+################################################################################
+echo "========================================================================"
+echo " STAGE 4/5: ATTACH VOLUMES TO SECONDARY LPAR"
+echo "========================================================================"
+echo ""
+
+echo "→ Attaching volumes to secondary LPAR..."
+echo "  LPAR: ${SECONDARY_LPAR}"
+echo "  Instance ID: ${SECONDARY_INSTANCE_ID}"
+echo ""
+
+# --- Submit attachment request ---
+if [[ -n "$CLONE_DATA_IDS" ]]; then
+    echo "  Attaching boot + data volumes..."
+    ibmcloud pi instance volume attach "$SECONDARY_INSTANCE_ID" \
+        --volumes "$CLONE_DATA_IDS" \
+        --boot-volume "$CLONE_BOOT_ID" \
+        >/dev/null 2>&1 || {
+            echo "✗ ERROR: Volume attachment failed"
+            FAILED_STAGE="ATTACH_VOLUME"
+            exit 1
+    }
+
+else
+    echo "  Attaching boot volume only..."
+    ibmcloud pi instance volume attach "$SECONDARY_INSTANCE_ID" \
+        --boot-volume "$CLONE_BOOT_ID" \
+        >/dev/null 2>&1 || {
+            echo "✗ ERROR: Boot volume attachment failed"
             exit 1
         }
-    done
-    echo "  ✓ All data volumes attached"
-    echo ""
 fi
 
-# ------------------------------------------------------------------------------
-# Wait for Attachments to Complete
-# ------------------------------------------------------------------------------
-echo "→ Waiting ${INITIAL_WAIT} seconds for volume attachments to stabilize..."
+echo "✓ Attachment request accepted"
+echo ""
+
+# --- Initial backend settle delay ---
+echo "→ Waiting ${INITIAL_WAIT}s for backend stabilization..."
 sleep "$INITIAL_WAIT"
 echo ""
 
-# Verify all volumes are attached
-TOTAL_VOLUME_COUNT=1  # Boot volume
-if [[ -n "$CLONE_DATA_IDS" ]]; then
-    DATA_VOL_COUNT=$(echo "$CLONE_DATA_IDS" | tr ',' '\n' | wc -l | tr -d ' ')
-    TOTAL_VOLUME_COUNT=$((TOTAL_VOLUME_COUNT + DATA_VOL_COUNT))
-fi
+# --- Poll for attachment confirmation ---
+echo "→ Polling for volume attachment confirmation..."
 
-echo "→ Verifying volume attachment status..."
-ATTACHED_COUNT=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null \
-    | jq '.volumeIDs | length')
 
-if [[ "$ATTACHED_COUNT" -ne "$TOTAL_VOLUME_COUNT" ]]; then
-    echo "✗ ERROR: Volume count mismatch (Expected: ${TOTAL_VOLUME_COUNT}, Found: ${ATTACHED_COUNT})"
+
+
+ELAPSED=0
+
+while true; do
+    VOL_LIST=$(ibmcloud pi instance volume list "$SECONDARY_INSTANCE_ID" --json 2>/dev/null \
+        | jq -r '(.volumes // [])[]?.volumeID')
+
+    # Assume success until proven otherwise
+    BOOT_ATTACHED=false
+    DATA_ATTACHED=true
+
+    ############ Check boot volume
+    if grep -qx "$CLONE_BOOT_ID" <<<"$VOL_LIST"; then
+        BOOT_ATTACHED=true
+    fi
+
+    # Check data volumes (if any)
+    if [[ -n "$CLONE_DATA_IDS" ]]; then
+        for VOL in ${CLONE_DATA_IDS//,/ }; do
+            if ! grep -qx "$VOL" <<<"$VOL_LIST"; then    #########took out qx
+                DATA_ATTACHED=false
+                break
+            fi
+        done
+    fi
+
+    if [[ "$BOOT_ATTACHED" == "true" && "$DATA_ATTACHED" == "true" ]]; then
+        echo "✓ All volumes confirmed attached"
+        break
+    fi
+
+    if (( ELAPSED >= MAX_ATTACH_WAIT )); then
+        FAILED_STAGE="ATTACH_VOLUME"
+        echo "✗ ERROR: Volumes not attached after ${MAX_ATTACH_WAIT}s"
+        exit 1
+    fi
+
+
+    echo "  Volumes not fully visible yet - checking again in ${POLL_INTERVAL}s..."
+    sleep "$POLL_INTERVAL"
+    ELAPSED=$((ELAPSED + POLL_INTERVAL))
+done
+
+echo ""
+echo "Pausing 60 seconds to allow logs to sync.."
+echo ""
+sleep 60s
+
+echo ""
+echo "------------------------------------------------------------------------"
+echo " Stage 4 Complete: Volumes attached and verified"
+echo "------------------------------------------------------------------------"
+echo ""
+
+
+fi  # ← closes "if [[ $RESUME_AT_STAGE_5 -ne 1 ]]"
+
+
+
+################################################################################
+# STAGE 5: BOOT SECONDARY LPAR
+# Logic:
+#   1. Check current LPAR status
+#   2. If not ACTIVE, configure boot mode and start LPAR
+#   3. Poll status until ACTIVE or timeout
+#   4. Handle ERROR state as failure
+################################################################################
+
+
+echo "========================================================================"
+echo " STAGE 5/5: BOOT SECONDARY LPAR"
+echo "========================================================================"
+echo ""
+
+echo "→ Checking current LPAR status..."
+
+set +e
+INSTANCE_JSON=$(ibmcloud pi instance get "$SECONDARY_INSTANCE_ID" --json 2>/dev/null)
+RC=$?
+set -e
+
+if [[ $RC -ne 0 || -z "$INSTANCE_JSON" ]]; then
+    echo "✗ Unable to retrieve LPAR status"
+    FAILED_STAGE="STARTUP"
     exit 1
 fi
-echo "  ✓ All ${TOTAL_VOLUME_COUNT} volumes verified as attached"
+
+CURRENT_STATUS=$(echo "$INSTANCE_JSON" | jq -r '.status // "UNKNOWN"')
+echo "  Current status: ${CURRENT_STATUS}"
 echo ""
-
-echo "------------------------------------------------------------------------"
-echo " Stage 4 Complete: All volumes attached to secondary LPAR"
-echo "------------------------------------------------------------------------"
-echo ""
-
-################################################################################
-# STAGE 5: BOOT CONFIGURATION & STARTUP
-################################################################################
-FAILED_STAGE="BOOT_CONFIG"
-
-# --- Check if we need to run STAGE 5 ---
-if [[ ${RESUME_AT_STAGE_5} -eq 1 ]]; then
-    echo "→ RESUME_AT_STAGE_5 flag is set — skipping to LPAR startup"
-    echo ""
-fi
-
-echo "========================================================================"
-echo " STAGE 5/5: BOOT CONFIGURATION & LPAR STARTUP"
-echo "========================================================================"
-echo ""
-
-if [[ ${RESUME_AT_STAGE_5} -ne 1 ]]; then
-    echo "→ Configuring boot volume as primary bootable device..."
-
-    ibmcloud pi instance update "$SECONDARY_INSTANCE_ID" \
-        --boot-volume "$CLONE_BOOT_ID" > /dev/null 2>&1 || {
-        echo "✗ ERROR: Failed to configure boot volume"
-        exit 1
-    }
-    echo "  ✓ Boot volume configured: ${CLONE_BOOT_ID}"
-    echo ""
-fi
 
 ###############################################################################
-# START LPAR (WITH RETRY LOGIC)
+# BOOT CONFIGURATION (ONLY IF NOT ACTIVE)
 ###############################################################################
 
-FAILED_STAGE="STARTUP"
+if [[ "$CURRENT_STATUS" != "ACTIVE" ]]; then
+    echo "→ Configuring boot mode (NORMAL)..."
 
-if [[ ${RESUME_AT_STAGE_5} -ne 1 ]]; then
-    echo "→ Starting secondary LPAR in NORMAL boot mode..."
-    echo ""
+    BOOTCFG_SUCCESS=0
 
-    IN_START_RETRY=1   # <<< ENTER RETRY MODE
-    START_SUCCESS=0
-    START_ATTEMPTS=0
-    MAX_START_ATTEMPTS=3
-
-    while [[ $START_ATTEMPTS -lt $MAX_START_ATTEMPTS && $START_SUCCESS -ne 1 ]]; do
-        START_ATTEMPTS=$((START_ATTEMPTS + 1))
-        echo "  Start attempt ${START_ATTEMPTS}/${MAX_START_ATTEMPTS}..."
+    for BOOTCFG_ATTEMPT in 1 2; do
+        echo "  Boot config attempt ${BOOTCFG_ATTEMPT}/2"
 
         set +e
-        ibmcloud pi instance start "$SECONDARY_INSTANCE_ID" > /dev/null 2>&1
-        START_RC=$?
+        BOOTCFG_OUTPUT=$(ibmcloud pi instance operation "$SECONDARY_INSTANCE_ID" \
+            --operation-type boot \
+            --boot-mode b \
+            --boot-operating-mode normal 2>&1)
+        RC=$?
         set -e
 
-        if [[ $START_RC -eq 0 ]]; then
-            echo "  ✓ Start command accepted"
+        echo "$BOOTCFG_OUTPUT"
+
+        if [[ $RC -eq 0 ]]; then
+            echo "✓ Boot mode configured"
+            BOOTCFG_SUCCESS=1
+            break
+        fi
+
+        sleep 60
+    done
+
+    if [[ $BOOTCFG_SUCCESS -ne 1 ]]; then
+        FAILED_STAGE="BOOT_CONFIG"
+        exit 1
+    fi
+
+    ############################################################################
+    # START LPAR (RETRYABLE, NO TRAPS)
+    ############################################################################
+
+    echo "→ Starting LPAR..."
+
+    START_SUCCESS=0
+    IN_START_RETRY=1   # <<< CRITICAL FLAG
+
+    for START_ATTEMPT in 1 2 3; do
+        echo "  Start attempt ${START_ATTEMPT}/3"
+
+        set +e
+        START_OUTPUT=$(ibmcloud pi instance action "$SECONDARY_INSTANCE_ID" \
+            --operation start 2>&1)
+        RC=$?
+        set -e
+
+        echo "$START_OUTPUT"
+
+        if [[ $RC -eq 0 ]]; then
+            echo "✓ Start command accepted"
             START_SUCCESS=1
             break
         fi
 
-        # Capture error message
-        START_ERROR=$(ibmcloud pi instance start "$SECONDARY_INSTANCE_ID" 2>&1 || true)
-
-        # Check if error is retryable
-        if echo "$START_ERROR" | grep -qi "attaching"; then
+        # Retryable failure handling
+        if echo "$START_OUTPUT" | grep -q "attaching_volume"; then
             echo "⚠ Instance still attaching volumes — retrying"
         else
             echo "✗ Non-retryable start failure"
