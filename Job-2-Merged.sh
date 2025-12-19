@@ -262,13 +262,23 @@ echo ""
 
 echo "→ Resolving secondary LPAR instance ID..."
 
-SECONDARY_INSTANCE_ID=$(ibmcloud pi instance list --json 2>/dev/null \
-    | jq -r --arg N "$SECONDARY_LPAR" \
-      '.pvmInstances[] | select(.name==$N) | .id' \
-    | head -n 1)
+set +e
+INSTANCE_LIST=$(ibmcloud pi instance list --json 2>/dev/null)
+LIST_RC=$?
+set -e
+
+if [[ $LIST_RC -ne 0 ]]; then
+    echo "✗ ERROR: Failed to list instances"
+    exit 1
+fi
+
+SECONDARY_INSTANCE_ID=$(echo "$INSTANCE_LIST" | jq -r --arg N "$SECONDARY_LPAR" \
+      '.pvmInstances[]? | select(.name==$N) | .id' 2>/dev/null | head -n 1)
 
 if [[ -z "$SECONDARY_INSTANCE_ID" || "$SECONDARY_INSTANCE_ID" == "null" ]]; then
     echo "✗ ERROR: Secondary LPAR '${SECONDARY_LPAR}' not found"
+    echo "Available LPARs:"
+    echo "$INSTANCE_LIST" | jq -r '.pvmInstances[]?.name' 2>/dev/null || echo "(Unable to list)"
     exit 1
 fi
 
