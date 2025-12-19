@@ -42,12 +42,12 @@ RUN ibmcloud plugin install code-engine -f
 # -----------------------------------------------------------
 # Copy script into container
 # -----------------------------------------------------------
-COPY job2-clone-restore.sh /job2-clone-restore.sh
+COPY job-2-Merged.sh /job-2-Merged.sh
 
 # Normalize line endings + ensure script is executable
-RUN sed -i 's/\r$//' /job2-clone-restore.sh && chmod +x /job2-clone-restore.sh
+RUN sed -i 's/\r$//' /job-2-Merged.sh && chmod +x /job-2-Merged.sh
 
 # -----------------------------------------------------------
 # Run the script
 # -----------------------------------------------------------
-CMD ["/job2-clone-restore.sh"]
+CMD ["/job-2-Merged.sh"]
