@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 ################################################################################
-# JOB 2: CLONE & RESTORE (NO SNAPSHOTS)
+# JOB 2: CLONE & RESTORE (NO SNAPSHOTS) - WITH IBMi SSH PREP
+# Version: v5
 # Purpose: Clone volumes from primary LPAR and attach to secondary LPAR
 # Dependencies: IBM Cloud CLI, PowerVS plugin, jq
 ################################################################################
@@ -28,7 +29,7 @@ set -eu
 ################################################################################
 echo ""
 echo "========================================================================"
-echo " JOB 2: CLONE & RESTORE OPERATIONS"
+echo " JOB 2: CLONE & RESTORE OPERATIONS (v5)"
 echo " Purpose: Clone primary LPAR volumes and restore to secondary LPAR"
 echo "========================================================================"
 echo ""
@@ -278,8 +279,14 @@ echo "→ Checking attached volumes on secondary LPAR..."
 
 VOLUME_JSON=$(ibmcloud pi instance volume list "$SECONDARY_INSTANCE_ID" --json 2>/dev/null)
 
-BOOT_VOLUMES=$(echo "$VOLUME_JSON" | jq '[.volumes[] | select(.bootable == true)] | length')
-TOTAL_VOLUMES=$(echo "$VOLUME_JSON" | jq '.volumes | length')
+set +e
+BOOT_VOLUMES=$(echo "$VOLUME_JSON" | jq '[.volumes[]? | select(.bootable == true)] | length' 2>/dev/null)
+TOTAL_VOLUMES=$(echo "$VOLUME_JSON" | jq '.volumes? | length' 2>/dev/null)
+set -e
+
+# Default to 0 if jq failed
+BOOT_VOLUMES=${BOOT_VOLUMES:-0}
+TOTAL_VOLUMES=${TOTAL_VOLUMES:-0}
 
 echo "  Total attached volumes: ${TOTAL_VOLUMES}"
 echo "  Bootable volumes       : ${BOOT_VOLUMES}"
