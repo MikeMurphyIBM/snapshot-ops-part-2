@@ -2,7 +2,7 @@
 
 ################################################################################
 # JOB 2: CLONE & RESTORE (NO SNAPSHOTS) - WITH IBMi SSH PREP
-# Version: v5
+# Version: v7
 # Purpose: Clone volumes from primary LPAR and attach to secondary LPAR
 # Dependencies: IBM Cloud CLI, PowerVS plugin, jq
 ################################################################################
@@ -29,7 +29,7 @@ set -eu
 ################################################################################
 echo ""
 echo "========================================================================"
-echo " JOB 2: CLONE & RESTORE OPERATIONS (v5)"
+echo " JOB 2: CLONE & RESTORE OPERATIONS (v7)"
 echo " Purpose: Clone primary LPAR volumes and restore to secondary LPAR"
 echo "========================================================================"
 echo ""
@@ -263,13 +263,26 @@ echo ""
 
 echo "→ Resolving secondary LPAR instance ID..."
 
-SECONDARY_INSTANCE_ID=$(ibmcloud pi instance list --json 2>/dev/null \
-    | jq -r --arg N "$SECONDARY_LPAR" \
-      '.pvmInstances[] | select(.name==$N) | .id' \
-    | head -n 1)
+set +e
+INSTANCE_LIST_OUTPUT=$(ibmcloud pi instance list --json 2>&1)
+INSTANCE_LIST_RC=$?
+set -e
+
+if [[ $INSTANCE_LIST_RC -ne 0 ]]; then
+    echo "✗ ERROR: Failed to list PowerVS instances (exit code: ${INSTANCE_LIST_RC})"
+    echo "Output: ${INSTANCE_LIST_OUTPUT}"
+    exit 1
+fi
+
+SECONDARY_INSTANCE_ID=$(echo "$INSTANCE_LIST_OUTPUT" | jq -r --arg N "$SECONDARY_LPAR" \
+      '.pvmInstances[]? | select(.name==$N) | .id' 2>/dev/null | head -n 1)
 
 if [[ -z "$SECONDARY_INSTANCE_ID" || "$SECONDARY_INSTANCE_ID" == "null" ]]; then
-    echo "✗ ERROR: Secondary LPAR '${SECONDARY_LPAR}' not found"
+    echo "✗ ERROR: Secondary LPAR '${SECONDARY_LPAR}' not found in workspace"
+    echo "Searching for: ${SECONDARY_LPAR}"
+    echo ""
+    echo "Available instances in workspace:"
+    echo "$INSTANCE_LIST_OUTPUT" | jq -r '.pvmInstances[]? | "  - \(.name) (ID: \(.id))"' 2>/dev/null || echo "  (Unable to parse instance list)"
     exit 1
 fi
 
@@ -430,8 +443,18 @@ echo "========================================================================"
 echo ""
 
 # ------------------------------------------------------------------------------
-# STAGE 3a: Install SSH Keys from Code Engine Secrets
+# STAGE 3a: Install SSH Client and SSH Keys
 # ------------------------------------------------------------------------------
+echo "→ Installing SSH client..."
+
+set +e
+apt-get update -qq > /dev/null 2>&1
+apt-get install -y openssh-client -qq > /dev/null 2>&1
+set -e
+
+echo "  ✓ SSH client installed"
+echo ""
+
 echo "→ Installing SSH keys from Code Engine secrets..."
 
 mkdir -p "$HOME/.ssh"
@@ -1039,3 +1062,4 @@ echo "========================================================================"
 echo ""
 
 exit 0
+
