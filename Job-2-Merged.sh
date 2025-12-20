@@ -985,7 +985,7 @@ unset _DATA_VOLS
 
 echo ""
 echo "  Volumes Attached:        ✓ Yes (${TOTAL_VOLUME_COUNT} total)"
-echo "  Boot Mode:               ✓ NORMAL (Mode A)"
+echo "  Boot Mode:               ✓ NORMAL (Mode B)"
 echo "  ────────────────────────────────────────────────────────────────"
 echo "  Clone Prefix:            ${CLONE_PREFIX}"
 echo ""
