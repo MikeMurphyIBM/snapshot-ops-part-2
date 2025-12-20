@@ -484,6 +484,9 @@ echo ""
 # ------------------------------------------------------------------------------
 # STAGE 3b: SSH to IBMi and Run Preparation Commands
 # ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# STAGE 3b: SSH to IBMi and Run Preparation Commands
+# ------------------------------------------------------------------------------
 echo "→ Connecting to IBMi via VSI for disk preparation..."
 
 ssh -i "$VSI_KEY_FILE" \
@@ -495,9 +498,10 @@ ssh -i "$VSI_KEY_FILE" \
        -o UserKnownHostsFile=/dev/null \
        murphy@192.168.0.109 \
        'system \"CALL PGM(QSYS/QAENGCHG) PARM(*ENABLECI)\"; \
-        system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*FRCWRT)\"'" || true
+        system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*FRCWRT)\"; \
+        system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*SUSPEND) SSPTIMO(15)\"'" || true
 
-echo "  ✓ IBMi preparation commands completed"
+echo "  ✓ IBMi preparation commands completed - ASP suspended"
 echo ""
 
 echo "→ Waiting 3 seconds before initiating volume clone..."
@@ -529,7 +533,25 @@ fi
 
 echo "✓ Clone request submitted"
 echo "  Clone task ID: ${CLONE_TASK_ID}"
+echo ""
 
+# ------------------------------------------------------------------------------
+# Resume ASP immediately after clone initiation
+# ------------------------------------------------------------------------------
+echo "→ Resuming ASP on IBMi..."
+
+ssh -i "$VSI_KEY_FILE" \
+  -o StrictHostKeyChecking=no \
+  -o UserKnownHostsFile=/dev/null \
+  murphy@52.118.255.179 \
+  "ssh -i /home/murphy/.ssh/id_ed25519_vsi \
+       -o StrictHostKeyChecking=no \
+       -o UserKnownHostsFile=/dev/null \
+       murphy@192.168.0.109 \
+       'system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*RESUME)\"'" || true
+
+echo "  ✓ ASP resumed"
+echo ""
 
 # Wait for clone job to complete
 wait_for_clone_job "$CLONE_TASK_ID"
