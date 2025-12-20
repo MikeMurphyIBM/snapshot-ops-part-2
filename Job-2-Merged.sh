@@ -2,7 +2,7 @@
 
 ################################################################################
 # JOB 2: CLONE & RESTORE (NO SNAPSHOTS) - WITH IBMi SSH PREP
-# Version: v7
+echo " Version: v7"
 # Purpose: Clone volumes from primary LPAR and attach to secondary LPAR
 # Dependencies: IBM Cloud CLI, PowerVS plugin, jq
 ################################################################################
@@ -445,14 +445,14 @@ echo ""
 # ------------------------------------------------------------------------------
 # STAGE 3a: Install SSH Client and SSH Keys
 # ------------------------------------------------------------------------------
-echo "→ Installing SSH client..."
+#echo "→ Installing SSH client..."
 
-set +e
-apt-get update -qq > /dev/null 2>&1
-apt-get install -y openssh-client -qq > /dev/null 2>&1
-set -e
+#set +e
+#apt-get update -qq > /dev/null 2>&1
+#apt-get install -y openssh-client -qq > /dev/null 2>&1
+#set -e
 
-echo "  ✓ SSH client installed"
+#echo "  ✓ SSH client installed"
 echo ""
 
 echo "→ Installing SSH keys from Code Engine secrets..."
@@ -481,9 +481,7 @@ chmod 600 "$IBMI_KEY_FILE"
 echo "  ✓ IBMi SSH key installed"
 echo ""
 
-# ------------------------------------------------------------------------------
-# STAGE 3b: SSH to IBMi and Run Preparation Commands
-# ------------------------------------------------------------------------------
+
 # ------------------------------------------------------------------------------
 # STAGE 3b: SSH to IBMi and Run Preparation Commands
 # ------------------------------------------------------------------------------
@@ -498,15 +496,14 @@ ssh -i "$VSI_KEY_FILE" \
        -o UserKnownHostsFile=/dev/null \
        murphy@192.168.0.109 \
        'system \"CALL PGM(QSYS/QAENGCHG) PARM(*ENABLECI)\"; \
-        system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*FRCWRT)\"; \
-        system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*SUSPEND) SSPTIMO(15)\"'" || true
+        system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*FRCWRT)\"'" || true
 
-echo "  ✓ IBMi preparation commands completed - ASP suspended"
+echo "  ✓ IBMi preparation commands completed"
 echo ""
 
-echo "→ Waiting 3 seconds before initiating volume clone..."
-sleep 3
-echo ""
+#echo "→ Waiting 3 seconds before initiating volume clone..."
+#sleep 3
+#echo ""
 
 # ------------------------------------------------------------------------------
 # STAGE 3c: Clone Volumes
@@ -534,27 +531,6 @@ fi
 echo "✓ Clone request submitted"
 echo "  Clone task ID: ${CLONE_TASK_ID}"
 echo ""
-
-# ------------------------------------------------------------------------------
-# Resume ASP immediately after clone initiation
-# ------------------------------------------------------------------------------
-echo "→ Resuming ASP on IBMi..."
-
-ssh -i "$VSI_KEY_FILE" \
-  -o StrictHostKeyChecking=no \
-  -o UserKnownHostsFile=/dev/null \
-  murphy@52.118.255.179 \
-  "ssh -i /home/murphy/.ssh/id_ed25519_vsi \
-       -o StrictHostKeyChecking=no \
-       -o UserKnownHostsFile=/dev/null \
-       murphy@192.168.0.109 \
-       'system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*RESUME)\"'" || true
-
-echo "  ✓ ASP resumed"
-echo ""
-
-# Wait for clone job to complete
-wait_for_clone_job "$CLONE_TASK_ID"
 
 echo ""
 echo "→ Extracting cloned volume IDs..."
