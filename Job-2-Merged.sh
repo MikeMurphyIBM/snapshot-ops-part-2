@@ -504,6 +504,7 @@ ssh -i "$VSI_KEY_FILE" \
         system \"CHGTCPSVR SVRSPCVAL(*TELNET) AUTOSTART(*YES)\"; \
         system \"CHGTCPSVR SVRSPCVAL(*SSHD) AUTOSTART(*YES)\"; \
         system \"CHGTCPIFC INTNETADR('\''192.168.0.109'\'') AUTOSTART(*NO)\"; \
+        sleep 5; \
         system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*FRCWRT)\"; \
         system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*SUSPEND) SSPTIMO(60)\"'" || true
 
