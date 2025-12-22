@@ -542,10 +542,6 @@ echo "✓ Clone request submitted"
 echo "  Clone task ID: ${CLONE_TASK_ID}"
 echo ""
 
-
-# Wait for clone job to complete
-wait_for_clone_job "$CLONE_TASK_ID"
-
 echo "→ Waiting 45 seconds before resuming ASP operations..."
 sleep 45
 echo ""
@@ -566,6 +562,12 @@ ssh -i "$VSI_KEY_FILE" \
 
 echo "  ✓ ASP resumed"
 echo ""
+
+
+# Wait for clone job to complete
+wait_for_clone_job "$CLONE_TASK_ID"
+
+
 
 echo ""
 echo "→ Extracting cloned volume IDs..."
