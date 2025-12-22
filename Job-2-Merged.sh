@@ -562,8 +562,6 @@ ssh -i "$VSI_KEY_FILE" \
 echo "  ✓ ASP resumed"
 echo ""
 
-# Wait for clone job to complete
-wait_for_clone_job "$CLONE_TASK_ID"
 
 # Wait for clone job to complete
 wait_for_clone_job "$CLONE_TASK_ID"
