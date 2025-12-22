@@ -3,6 +3,7 @@
 ################################################################################
 # JOB 2: CLONE & RESTORE (NO SNAPSHOTS) - WITH IBMi SSH PREP
 echo " Version: v7"
+# suspending ASP for 15 seconds
 # Purpose: Clone volumes from primary LPAR and attach to secondary LPAR
 # Dependencies: IBM Cloud CLI, PowerVS plugin, jq
 ################################################################################
