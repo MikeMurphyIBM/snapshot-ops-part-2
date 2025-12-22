@@ -187,6 +187,7 @@ cleanup_on_failure() {
 #   2. Complete when status is "completed"
 #   3. Fail if status is "failed"
 ################################################################################
+
 wait_for_clone_job() {
     local task_id=$1
     echo "→ Waiting for asynchronous clone task: ${task_id}..."
@@ -202,11 +203,32 @@ wait_for_clone_job() {
             echo "✗ ERROR: Clone task failed"
             exit 1
         else
-            echo "  Clone task status: ${STATUS} - waiting 30s..."
-            sleep 30
+            echo "  Clone task status: ${STATUS} - waiting ${POLL_INTERVAL}s..."
+            sleep "$POLL_INTERVAL"   # ← Use the variable!
         fi
     done
 }
+
+#wait_for_clone_job() {
+#    local task_id=$1
+ #   echo "→ Waiting for asynchronous clone task: ${task_id}..."
+  
+#    while true; do
+#        STATUS=$(ibmcloud pi volume clone-async get "$task_id" --json \
+#            | jq -r '.status')
+        
+#        if [[ "$STATUS" == "completed" ]]; then
+#            echo "✓ Clone task completed successfully"
+#            break
+#        elif [[ "$STATUS" == "failed" ]]; then
+#            echo "✗ ERROR: Clone task failed"
+#            exit 1
+#        else
+#            echo "  Clone task status: ${STATUS} - waiting 30s..."
+#            sleep 30
+#        fi
+#    done
+#}
 
 ################################################################################
 # ACTIVATE CLEANUP TRAP
