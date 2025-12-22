@@ -487,6 +487,9 @@ echo ""
 # ------------------------------------------------------------------------------
 # STAGE 3b: SSH to IBMi and Run Preparation Commands
 # ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# STAGE 3b: SSH to IBMi and Run Preparation Commands
+# ------------------------------------------------------------------------------
 echo "→ Connecting to IBMi via VSI for disk preparation..."
 
 ssh -i "$VSI_KEY_FILE" \
@@ -498,8 +501,10 @@ ssh -i "$VSI_KEY_FILE" \
        -o UserKnownHostsFile=/dev/null \
        murphy@192.168.0.109 \
        'system \"CALL PGM(QSYS/QAENGCHG) PARM(*ENABLECI)\"; \
+        system \"CHGTCPSVR SVRSPCVAL(*TELNET) AUTOSTART(*YES)\"; \
+        system \"CHGTCPSVR SVRSPCVAL(*SSHD) AUTOSTART(*YES)\"; \
         system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*FRCWRT)\"; \
-        system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*SUSPEND) SSPTIMO(15)\"'" || true
+        system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*SUSPEND) SSPTIMO(20)\"'" || true
 
 echo "  ✓ IBMi preparation commands completed - ASP suspended"
 echo ""
