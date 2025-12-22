@@ -500,12 +500,12 @@ ssh -i "$VSI_KEY_FILE" \
        -o StrictHostKeyChecking=no \
        -o UserKnownHostsFile=/dev/null \
        murphy@192.168.0.109 \
-       'system "CALL PGM(QSYS/QAENGCHG) PARM(*ENABLECI)"; \
-        system "CHGTCPSVR SVRSPCVAL(*TELNET) AUTOSTART(*YES)"; \
-        system "CHGTCPSVR SVRSPCVAL(*SSHD) AUTOSTART(*YES)"; \
-        system "CHGTCPIFC INTNETADR('\''192.168.0.109'\'') AUTOSTART(*NO)"; \
-        system "CHGASPACT ASPDEV(*SYSBAS) OPTION(*FRCWRT)"; \
-        system "CHGASPACT ASPDEV(*SYSBAS) OPTION(*SUSPEND) SSPTIMO(60)"' || true
+       'system \"CALL PGM(QSYS/QAENGCHG) PARM(*ENABLECI)\"; \
+        system \"CHGTCPSVR SVRSPCVAL(*TELNET) AUTOSTART(*YES)\"; \
+        system \"CHGTCPSVR SVRSPCVAL(*SSHD) AUTOSTART(*YES)\"; \
+        system \"CHGTCPIFC INTNETADR('\''192.168.0.109'\'') AUTOSTART(*NO)\"; \
+        system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*FRCWRT)\"; \
+        system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*SUSPEND) SSPTIMO(60)\"'" || true
 
 echo "  ✓ IBMi preparation commands completed - ASP suspended for 60 seconds"
 echo ""
@@ -556,8 +556,8 @@ ssh -i "$VSI_KEY_FILE" \
        -o StrictHostKeyChecking=no \
        -o UserKnownHostsFile=/dev/null \
        murphy@192.168.0.109 \
-       'system "CHGASPACT ASPDEV(*SYSBAS) OPTION(*RESUME)"; \
-        system "CHGTCPIFC INTNETADR('\''192.168.0.109'\'') AUTOSTART(*YES)"' || true
+       'system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*RESUME)\"; \
+        system \"CHGTCPIFC INTNETADR('\''192.168.0.109'\'') AUTOSTART(*YES)\"'" || true
 
 echo "  ✓ ASP resumed"
 echo ""
