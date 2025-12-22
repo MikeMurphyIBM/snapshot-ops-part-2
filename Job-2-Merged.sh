@@ -504,9 +504,9 @@ ssh -i "$VSI_KEY_FILE" \
         system \"CHGTCPSVR SVRSPCVAL(*TELNET) AUTOSTART(*YES)\"; \
         system \"CHGTCPSVR SVRSPCVAL(*SSHD) AUTOSTART(*YES)\"; \
         system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*FRCWRT)\"; \
-        system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*SUSPEND) SSPTIMO(20)\"'" || true
+        system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*SUSPEND) SSPTIMO(30)\"'" || true
 
-echo "  ✓ IBMi preparation commands completed - ASP suspended"
+echo "  ✓ IBMi preparation commands completed - ASP suspended for 30 seconds"
 echo ""
 
 echo "→ Waiting 2 seconds before initiating volume clone..."
