@@ -500,17 +500,18 @@ ssh -i "$VSI_KEY_FILE" \
        -o StrictHostKeyChecking=no \
        -o UserKnownHostsFile=/dev/null \
        murphy@192.168.0.109 \
-       'system \"CALL PGM(QSYS/QAENGCHG) PARM(*ENABLECI)\"; \
-        system \"CHGTCPSVR SVRSPCVAL(*TELNET) AUTOSTART(*YES)\"; \
-        system \"CHGTCPSVR SVRSPCVAL(*SSHD) AUTOSTART(*YES)\"; \
-        system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*FRCWRT)\"; \
-        system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*SUSPEND) SSPTIMO(30)\"'" || true
+       'system "CALL PGM(QSYS/QAENGCHG) PARM(*ENABLECI)"; \
+        system "CHGTCPSVR SVRSPCVAL(*TELNET) AUTOSTART(*YES)"; \
+        system "CHGTCPSVR SVRSPCVAL(*SSHD) AUTOSTART(*YES)"; \
+        system "CHGTCPIFC INTNETADR('\''192.168.0.109'\'') AUTOSTART(*NO)"; \
+        system "CHGASPACT ASPDEV(*SYSBAS) OPTION(*FRCWRT)"; \
+        system "CHGASPACT ASPDEV(*SYSBAS) OPTION(*SUSPEND) SSPTIMO(60)"' || true
 
-echo "  ✓ IBMi preparation commands completed - ASP suspended for 30 seconds"
+echo "  ✓ IBMi preparation commands completed - ASP suspended for 60 seconds"
 echo ""
 
-echo "→ Waiting 2 seconds before initiating volume clone..."
-sleep 2
+echo "→ Waiting 5 seconds before initiating volume clone..."
+sleep 5
 echo ""
 
 # ------------------------------------------------------------------------------
@@ -540,6 +541,10 @@ echo "✓ Clone request submitted"
 echo "  Clone task ID: ${CLONE_TASK_ID}"
 echo ""
 
+echo "→ Waiting 45 seconds before resuming ASP operations..."
+sleep 45
+echo ""
+
 # Resume ASP immediately after clone initiation
 echo "→ Resuming ASP on IBMi..."
 
@@ -551,7 +556,8 @@ ssh -i "$VSI_KEY_FILE" \
        -o StrictHostKeyChecking=no \
        -o UserKnownHostsFile=/dev/null \
        murphy@192.168.0.109 \
-       'system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*RESUME)\"'" || true
+       'system "CHGASPACT ASPDEV(*SYSBAS) OPTION(*RESUME)"; \
+        system "CHGTCPIFC INTNETADR('\''192.168.0.109'\'') AUTOSTART(*YES)"' || true
 
 echo "  ✓ ASP resumed"
 echo ""
