@@ -569,18 +569,18 @@ sleep 90
 echo ""
 
 # Resume ASP immediately after clone initiation
-echo "→ Resuming ASP on IBMi..."
+#echo "→ Resuming ASP on IBMi..."
 
-ssh -i "$VSI_KEY_FILE" \
-  -o StrictHostKeyChecking=no \
-  -o UserKnownHostsFile=/dev/null \
-  murphy@52.118.255.179 \
-  "ssh -i /home/murphy/.ssh/id_ed25519_vsi \
-       -o StrictHostKeyChecking=no \
-       -o UserKnownHostsFile=/dev/null \
-       murphy@192.168.0.109 \
-       'system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*RESUME)\"; \
-        system \"CHGTCPIFC INTNETADR('\''192.168.0.109'\'') AUTOSTART(*YES)\"'" || true
+#ssh -i "$VSI_KEY_FILE" \
+#  -o StrictHostKeyChecking=no \
+#  -o UserKnownHostsFile=/dev/null \
+#  murphy@52.118.255.179 \
+#  "ssh -i /home/murphy/.ssh/id_ed25519_vsi \
+#       -o StrictHostKeyChecking=no \
+#       -o UserKnownHostsFile=/dev/null \
+#       murphy@192.168.0.109 \
+#       'system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*RESUME)\"; \
+#        system \"CHGTCPIFC INTNETADR('\''192.168.0.109'\'') AUTOSTART(*YES)\"'" || true
 
 echo "  ✓ ASP resumed"
 echo ""
