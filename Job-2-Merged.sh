@@ -528,9 +528,9 @@ ssh -i "$VSI_KEY_FILE" \
         system \"CHGTCPIFC INTNETADR('\''192.168.0.109'\'') AUTOSTART(*NO)\"; \
         sleep 5; \
         system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*FRCWRT)\"; \
-        system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*SUSPEND) SSPTIMO(60)\"'" || true
+        system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*SUSPEND) SSPTIMO(120)\"'" || true
 
-echo "  ✓ IBMi preparation commands completed - ASP suspended for 60 seconds"
+echo "  ✓ IBMi preparation commands completed - ASP suspended for 120 seconds"
 echo ""
 
 echo "→ Waiting 5 seconds before initiating volume clone..."
