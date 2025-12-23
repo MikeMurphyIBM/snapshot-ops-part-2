@@ -763,9 +763,9 @@ while true; do
 done
 
 echo ""
-echo "Pausing 60 seconds to allow logs to sync.."
+echo "Pausing 120 seconds to allow logs to sync.."
 echo ""
-sleep 60s
+sleep 120s
 
 echo ""
 echo "------------------------------------------------------------------------"
