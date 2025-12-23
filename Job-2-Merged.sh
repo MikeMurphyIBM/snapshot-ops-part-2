@@ -52,7 +52,7 @@ readonly CLOUD_INSTANCE_ID="973f4d55-9056-4848-8ed0-4592093161d2" #workspace ID
 # LPAR Configuration
 readonly PRIMARY_LPAR="murphy-prod"              # Source LPAR for cloning
 readonly PRIMARY_INSTANCE_ID="fea64706-1929-41c9-a761-68c43a8f29cc"
-readonly SECONDARY_LPAR="murphy-prod-clone4"               # Target LPAR for restore
+readonly SECONDARY_LPAR="murphy-prod-clone5"               # Target LPAR for restore
 #readonly STORAGE_TIER="tier3"                     # Must match source tier
 
 # Naming Convention - Clone YYYY-MM-DD-HH-MM
@@ -522,19 +522,19 @@ ssh -i "$VSI_KEY_FILE" \
        -o StrictHostKeyChecking=no \
        -o UserKnownHostsFile=/dev/null \
        murphy@192.168.0.109 \
-       'system \"CHGTCPSVR SVRSPCVAL(*TELNET) AUTOSTART(*YES)\"; \
-        system \"CHGTCPSVR SVRSPCVAL(*SSHD) AUTOSTART(*YES)\"; \
-        system \"CHGTCPIFC INTNETADR('\''192.168.0.109'\'') AUTOSTART(*NO)\"; \
-        system \"CALL PGM(QSYS/QAENGCHG) PARM(*ENABLECI)\"; \
+       'system \"CALL PGM(QSYS/QAENGCHG) PARM(*ENABLECI)\"; \
+        sleep 15; \
+        system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*FRCWRT)\"; \
         sleep 30; \
         system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*FRCWRT)\"; \
+        sleep 30; \
         system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*SUSPEND) SSPTIMO(120)\"'" || true
 
 echo "  ✓ IBMi preparation commands completed - ASP suspended for 120 seconds"
 echo ""
 
-echo "→ Waiting 5 seconds before initiating volume clone..."
-sleep 5
+echo "→ Waiting 10 seconds before initiating volume clone..."
+sleep 10
 echo ""
 
 # ------------------------------------------------------------------------------
@@ -564,7 +564,7 @@ echo "✓ Clone request submitted"
 echo "  Clone task ID: ${CLONE_TASK_ID}"
 echo ""
 
-echo "→ Waiting 90 seconds before resuming ASP operations..."
+echo "→ Waiting before resuming ASP operations..."
 sleep 90
 echo ""
 
