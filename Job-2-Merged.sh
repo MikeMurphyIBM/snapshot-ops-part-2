@@ -59,7 +59,7 @@ readonly SECONDARY_LPAR="murphy-prod-clone3"               # Target LPAR for res
 readonly CLONE_PREFIX="murphy-prod-$(date +"%Y%m%d%H%M")"
 
 # Polling Configuration
-readonly POLL_INTERVAL=30
+readonly POLL_INTERVAL=60
 readonly INITIAL_WAIT=60
 readonly MAX_ATTACH_WAIT=1800
 readonly MAX_BOOT_WAIT=1200
@@ -526,7 +526,7 @@ ssh -i "$VSI_KEY_FILE" \
         system \"CHGTCPSVR SVRSPCVAL(*SSHD) AUTOSTART(*YES)\"; \
         system \"CHGTCPIFC INTNETADR('\''192.168.0.109'\'') AUTOSTART(*NO)\"; \
         system \"CALL PGM(QSYS/QAENGCHG) PARM(*ENABLECI)\"; \
-        sleep 5; \
+        sleep 30; \
         system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*FRCWRT)\"; \
         system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*SUSPEND) SSPTIMO(120)\"'" || true
 
@@ -763,9 +763,9 @@ while true; do
 done
 
 echo ""
-echo "Pausing 120 seconds to allow logs to sync.."
+echo "Pausing 180 seconds to allow logs to sync.."
 echo ""
-sleep 120s
+sleep 180s
 
 echo ""
 echo "------------------------------------------------------------------------"
