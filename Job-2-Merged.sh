@@ -564,8 +564,8 @@ echo "✓ Clone request submitted"
 echo "  Clone task ID: ${CLONE_TASK_ID}"
 echo ""
 
-echo "→ Waiting 45 seconds before resuming ASP operations..."
-sleep 45
+echo "→ Waiting 90 seconds before resuming ASP operations..."
+sleep 90
 echo ""
 
 # Resume ASP immediately after clone initiation
