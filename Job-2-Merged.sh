@@ -52,7 +52,7 @@ readonly CLOUD_INSTANCE_ID="973f4d55-9056-4848-8ed0-4592093161d2" #workspace ID
 # LPAR Configuration
 readonly PRIMARY_LPAR="murphy-prod"              # Source LPAR for cloning
 readonly PRIMARY_INSTANCE_ID="fea64706-1929-41c9-a761-68c43a8f29cc"
-readonly SECONDARY_LPAR="murphy-prod-clone"               # Target LPAR for restore
+readonly SECONDARY_LPAR="murphy-prod-clone2"               # Target LPAR for restore
 #readonly STORAGE_TIER="tier3"                     # Must match source tier
 
 # Naming Convention - Clone YYYY-MM-DD-HH-MM
