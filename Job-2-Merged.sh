@@ -2,7 +2,8 @@
 
 ################################################################################
 # JOB 2: CLONE & RESTORE (NO SNAPSHOTS) - WITH IBMi SSH PREP
-echo " Version: v8"
+echo " Version: v9"
+# attaching volumes individually
 # suspending ASP for 15 seconds
 # 15 minutes to allow volumes to attach
 # Purpose: Clone volumes from primary LPAR and attach to secondary LPAR
@@ -31,7 +32,7 @@ set -eu
 ################################################################################
 echo ""
 echo "========================================================================"
-echo " JOB 2: CLONE & RESTORE OPERATIONS (v7)"
+echo " JOB 2: CLONE & RESTORE OPERATIONS (v9)"
 echo " Purpose: Clone primary LPAR volumes and restore to secondary LPAR"
 echo "========================================================================"
 echo ""
@@ -53,7 +54,7 @@ readonly CLOUD_INSTANCE_ID="973f4d55-9056-4848-8ed0-4592093161d2" #workspace ID
 # LPAR Configuration
 readonly PRIMARY_LPAR="murphy-prod"              # Source LPAR for cloning
 readonly PRIMARY_INSTANCE_ID="fea64706-1929-41c9-a761-68c43a8f29cc"
-readonly SECONDARY_LPAR="murphy-prod-clone47"               # Target LPAR for restore
+readonly SECONDARY_LPAR="murphy-prod-clone11"               # Target LPAR for restore
 #readonly STORAGE_TIER="tier3"                     # Must match source tier
 
 # Naming Convention - Clone YYYY-MM-DD-HH-MM
@@ -683,10 +684,13 @@ echo ""
 ################################################################################
 # STAGE 4: ATTACH VOLUMES TO SECONDARY LPAR
 # Logic:
-#   1. Attach boot volume and data volumes (if any)
-#   2. Wait for initial stabilization
-#   3. Poll until all volumes appear in instance volume list
+#   1. Attach boot volume first
+#   2. Wait for boot volume to be confirmed attached
+#   3. Attach data volumes individually (if any)
+#   4. Wait for each data volume to be confirmed attached
 ################################################################################
+
+
 echo "========================================================================"
 echo " STAGE 4/5: ATTACH VOLUMES TO SECONDARY LPAR"
 echo "========================================================================"
@@ -697,100 +701,124 @@ echo "  LPAR: ${SECONDARY_LPAR}"
 echo "  Instance ID: ${SECONDARY_INSTANCE_ID}"
 echo ""
 
-# --- Submit attachment request ---
-if [[ -n "$CLONE_DATA_IDS" ]]; then
-    echo "  Attaching boot + data volumes..."
-    ibmcloud pi instance volume attach "$SECONDARY_INSTANCE_ID" \
-        --volumes "$CLONE_DATA_IDS" \
-        --boot-volume "$CLONE_BOOT_ID" \
-        >/dev/null 2>&1 || {
-            echo "✗ ERROR: Volume attachment failed"
-            FAILED_STAGE="ATTACH_VOLUME"
-            exit 1
+# --- Step 1: Attach boot volume first ---
+echo "→ Step 1: Attaching boot volume..."
+echo "  Boot volume ID: ${CLONE_BOOT_ID}"
+
+ibmcloud pi instance volume attach "$SECONDARY_INSTANCE_ID" \
+    --boot-volume "$CLONE_BOOT_ID" \
+    >/dev/null 2>&1 || {
+        echo "✗ ERROR: Boot volume attachment failed"
+        FAILED_STAGE="ATTACH_VOLUME"
+        exit 1
     }
 
-else
-    echo "  Attaching boot volume only..."
-    ibmcloud pi instance volume attach "$SECONDARY_INSTANCE_ID" \
-        --boot-volume "$CLONE_BOOT_ID" \
-        >/dev/null 2>&1 || {
-            echo "✗ ERROR: Boot volume attachment failed"
-            exit 1
-        }
-fi
-
-echo "✓ Attachment request accepted"
+echo "✓ Boot volume attachment request accepted"
 echo ""
 
-# --- Extended wait for volume attachment ---
-echo "→ Waiting 15 minutes for volumes to fully attach..."
-sleep 900
-echo "✓ Volume attachment wait complete"
-echo ""
+# --- Wait for boot volume to be visible ---
+echo "→ Waiting for boot volume to be confirmed attached..."
 
-# --- Initial backend settle delay ---
-echo "→ Waiting ${INITIAL_WAIT}s for backend stabilization..."
-sleep "$INITIAL_WAIT"
-echo ""
+BOOT_ELAPSED=0
+BOOT_CONFIRMED=false
 
-# --- Poll for attachment confirmation ---
-echo "→ Polling for volume attachment confirmation..."
-
-
-
-
-ELAPSED=0
-
-while true; do
+while [[ $BOOT_ELAPSED -lt $MAX_ATTACH_WAIT ]]; do
     VOL_LIST=$(ibmcloud pi instance volume list "$SECONDARY_INSTANCE_ID" --json 2>/dev/null \
         | jq -r '(.volumes // [])[]?.volumeID')
 
-    # Assume success until proven otherwise
-    BOOT_ATTACHED=false
-    DATA_ATTACHED=true
-
-    ############ Check boot volume
     if grep -qx "$CLONE_BOOT_ID" <<<"$VOL_LIST"; then
-        BOOT_ATTACHED=true
-    fi
-
-    # Check data volumes (if any)
-    if [[ -n "$CLONE_DATA_IDS" ]]; then
-        for VOL in ${CLONE_DATA_IDS//,/ }; do
-            if ! grep -qx "$VOL" <<<"$VOL_LIST"; then    #########took out qx
-                DATA_ATTACHED=false
-                break
-            fi
-        done
-    fi
-
-    if [[ "$BOOT_ATTACHED" == "true" && "$DATA_ATTACHED" == "true" ]]; then
-        echo "✓ All volumes confirmed attached"
+        echo "✓ Boot volume confirmed attached: ${CLONE_BOOT_ID}"
+        BOOT_CONFIRMED=true
         break
     fi
 
-    if (( ELAPSED >= MAX_ATTACH_WAIT )); then
-        FAILED_STAGE="ATTACH_VOLUME"
-        echo "✗ ERROR: Volumes not attached after ${MAX_ATTACH_WAIT}s"
-        exit 1
-    fi
-
-
-    echo "  Volumes not fully visible yet - checking again in ${POLL_INTERVAL}s..."
+    echo "  Boot volume not visible yet - checking again in ${POLL_INTERVAL}s..."
     sleep "$POLL_INTERVAL"
-    ELAPSED=$((ELAPSED + POLL_INTERVAL))
+    BOOT_ELAPSED=$((BOOT_ELAPSED + POLL_INTERVAL))
 done
 
+if [[ "$BOOT_CONFIRMED" == "false" ]]; then
+    FAILED_STAGE="ATTACH_VOLUME"
+    echo "✗ ERROR: Boot volume not attached after ${MAX_ATTACH_WAIT}s"
+    exit 1
+fi
+
 echo ""
-echo "Pausing 180 seconds to allow logs to sync.."
+
+# --- Step 2: Attach data volumes individually (if any) ---
+if [[ -n "$CLONE_DATA_IDS" ]]; then
+    echo "→ Step 2: Attaching data volumes individually..."
+    
+    # Convert comma-separated IDs to array
+    IFS=',' read -ra DATA_VOL_ARRAY <<<"$CLONE_DATA_IDS"
+    DATA_VOL_COUNT=${#DATA_VOL_ARRAY[@]}
+    
+    echo "  Total data volumes to attach: ${DATA_VOL_COUNT}"
+    echo ""
+    
+    VOL_NUM=1
+    for DATA_VOL_ID in "${DATA_VOL_ARRAY[@]}"; do
+        echo "→ Attaching data volume ${VOL_NUM}/${DATA_VOL_COUNT}..."
+        echo "  Volume ID: ${DATA_VOL_ID}"
+        
+        # Attach single data volume
+        ibmcloud pi instance volume attach "$SECONDARY_INSTANCE_ID" \
+            --volumes "$DATA_VOL_ID" \
+            >/dev/null 2>&1 || {
+                echo "✗ ERROR: Data volume attachment failed: ${DATA_VOL_ID}"
+                FAILED_STAGE="ATTACH_VOLUME"
+                exit 1
+            }
+        
+        echo "✓ Data volume attachment request accepted"
+        echo ""
+        
+        # Wait for this data volume to be confirmed
+        echo "→ Waiting for data volume to be confirmed attached..."
+        
+        DATA_ELAPSED=0
+        DATA_CONFIRMED=false
+        
+        while [[ $DATA_ELAPSED -lt $MAX_ATTACH_WAIT ]]; do
+            VOL_LIST=$(ibmcloud pi instance volume list "$SECONDARY_INSTANCE_ID" --json 2>/dev/null \
+                | jq -r '(.volumes // [])[]?.volumeID')
+            
+            if grep -qx "$DATA_VOL_ID" <<<"$VOL_LIST"; then
+                echo "✓ Data volume confirmed attached: ${DATA_VOL_ID}"
+                DATA_CONFIRMED=true
+                break
+            fi
+            
+            echo "  Data volume not visible yet - checking again in ${POLL_INTERVAL}s..."
+            sleep "$POLL_INTERVAL"
+            DATA_ELAPSED=$((DATA_ELAPSED + POLL_INTERVAL))
+        done
+        
+        if [[ "$DATA_CONFIRMED" == "false" ]]; then
+            FAILED_STAGE="ATTACH_VOLUME"
+            echo "✗ ERROR: Data volume not attached after ${MAX_ATTACH_WAIT}s: ${DATA_VOL_ID}"
+            exit 1
+        fi
+        
+        echo ""
+        ((VOL_NUM++))
+    done
+    
+    echo "✓ All data volumes attached successfully"
+else
+    echo "→ No data volumes to attach - boot volume only"
+fi
+
 echo ""
-sleep 180s
+echo "→ Pausing 180 seconds to allow system stabilization..."
+sleep 180
 
 echo ""
 echo "------------------------------------------------------------------------"
-echo " Stage 4 Complete: Volumes attached and verified"
+echo " Stage 4 Complete: All volumes attached and verified"
 echo "------------------------------------------------------------------------"
 echo ""
+
 
 
 fi  # ← closes "if [[ $RESUME_AT_STAGE_5 -ne 1 ]]"
