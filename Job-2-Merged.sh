@@ -1069,29 +1069,6 @@ echo "========================================================================"
 echo ""
 
 
-: <<'COMMENT'
-echo "========================================================================"
-echo " JOB COMPLETED SUCCESSFULLY"
-echo "========================================================================"
-echo ""
-echo "  Status:                  ✓ SUCCESS"
-echo "  Primary LPAR:            ${PRIMARY_LPAR}"
-echo "  Secondary LPAR:          ${SECONDARY_LPAR}"
-echo "  Secondary Instance ID:   ${SECONDARY_INSTANCE_ID}"
-echo "  Final Status:            ${FINAL_STATUS}"
-echo "  ────────────────────────────────────────────────────────────────"
-echo "  Volumes Cloned:          ✓ Yes"
-echo "  Boot Volume:             ${CLONE_BOOT_ID}"
-echo "  Data Volumes:            ${CLONE_DATA_IDS:-None}"
-echo "  Volumes Attached:        ✓ Yes"
-echo "  Boot Mode:               ✓ NORMAL (Mode A)"
-echo "  ────────────────────────────────────────────────────────────────"
-echo "  Clone Prefix:            ${CLONE_PREFIX}"
-echo ""
-echo "========================================================================"
-echo ""
-COMMENT
-
 
 
 ################################################################################
@@ -1154,6 +1131,9 @@ trap - ERR EXIT
 echo ""
 echo "========================================================================"
 echo ""
+
+# Give logs time to flush before exit
+sleep 2
 
 exit 0
 
