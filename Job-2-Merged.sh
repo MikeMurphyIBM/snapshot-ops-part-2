@@ -2,8 +2,9 @@
 
 ################################################################################
 # JOB 2: CLONE & RESTORE (NO SNAPSHOTS) - WITH IBMi SSH PREP
-echo " Version: v7"
+echo " Version: v8"
 # suspending ASP for 15 seconds
+# 15 minutes to allow volumes to attach
 # Purpose: Clone volumes from primary LPAR and attach to secondary LPAR
 # Dependencies: IBM Cloud CLI, PowerVS plugin, jq
 ################################################################################
@@ -52,7 +53,7 @@ readonly CLOUD_INSTANCE_ID="973f4d55-9056-4848-8ed0-4592093161d2" #workspace ID
 # LPAR Configuration
 readonly PRIMARY_LPAR="murphy-prod"              # Source LPAR for cloning
 readonly PRIMARY_INSTANCE_ID="fea64706-1929-41c9-a761-68c43a8f29cc"
-readonly SECONDARY_LPAR="murphy-prod-clone"               # Target LPAR for restore
+readonly SECONDARY_LPAR="murphy-prod-clone99"               # Target LPAR for restore
 #readonly STORAGE_TIER="tier3"                     # Must match source tier
 
 # Naming Convention - Clone YYYY-MM-DD-HH-MM
@@ -707,6 +708,12 @@ else
 fi
 
 echo "✓ Attachment request accepted"
+echo ""
+
+# --- Extended wait for volume attachment ---
+echo "→ Waiting 15 minutes for volumes to fully attach..."
+sleep 900
+echo "✓ Volume attachment wait complete"
 echo ""
 
 # --- Initial backend settle delay ---
