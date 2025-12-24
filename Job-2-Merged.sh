@@ -540,8 +540,8 @@ echo "✓ Clone request submitted"
 echo "  Clone task ID: ${CLONE_TASK_ID}"
 echo ""
 
-echo "→ Waiting 30 seconds before resuming ASP operations..."
-sleep 30
+echo "→ Waiting 90 seconds before resuming ASP operations..."
+sleep 90
 echo ""
 
 # Resume ASP and re-enable TCP/IP autostart
