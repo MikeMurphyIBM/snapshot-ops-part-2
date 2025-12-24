@@ -2,7 +2,8 @@
 
 ################################################################################
 # JOB 2: CLONE & RESTORE (NO SNAPSHOTS) - WITH IBMi SSH PREP
-echo " Version: v10"
+echo " Version: v11"
+# re-inserting the second IBMi login/commands
 # attaching volumes individually
 # suspending ASP for 15 seconds
 # 15 minutes to allow volumes to attach
@@ -497,8 +498,10 @@ ssh -i "$VSI_KEY_FILE" \
        -o StrictHostKeyChecking=no \
        -o UserKnownHostsFile=/dev/null \
        murphy@192.168.0.109 \
-       'system \"CALL PGM(QSYS/QAENGCHG) PARM(*ENABLECI)\"; \
-        sleep 15; \
+       'system \"CHGTCPIFC INTNETADR('\''192.168.0.109'\'') AUTOSTART(*NO)\"; \
+        sleep 5; \
+        system \"CALL PGM(QSYS/QAENGCHG) PARM(*ENABLECI)\"; \
+        sleep 5; \
         system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*FRCWRT)\"; \
         sleep 30; \
         system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*SUSPEND) SSPTIMO(120)\"'" || true
@@ -509,6 +512,7 @@ echo ""
 echo "→ Waiting 5 seconds before initiating volume clone..."
 sleep 5
 echo ""
+
 
 # ------------------------------------------------------------------------------
 # STAGE 3c: Clone Volumes
@@ -536,12 +540,26 @@ echo "✓ Clone request submitted"
 echo "  Clone task ID: ${CLONE_TASK_ID}"
 echo ""
 
-echo "→ Waiting before resuming ASP operations..."
-sleep 90
-echo ""
-echo "  ✓ ASP resumed"
+echo "→ Waiting 30 seconds before resuming ASP operations..."
+sleep 30
 echo ""
 
+# Resume ASP and re-enable TCP/IP autostart
+echo "→ Resuming ASP and re-enabling TCP/IP autostart on IBMi..."
+
+ssh -i "$VSI_KEY_FILE" \
+  -o StrictHostKeyChecking=no \
+  -o UserKnownHostsFile=/dev/null \
+  murphy@52.118.255.179 \
+  "ssh -i /home/murphy/.ssh/id_ed25519_vsi \
+       -o StrictHostKeyChecking=no \
+       -o UserKnownHostsFile=/dev/null \
+       murphy@192.168.0.109 \
+       'system \"CHGTCPIFC INTNETADR('\''192.168.0.109'\'') AUTOSTART(*YES)\"; \
+        system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*RESUME)\"'" || true
+
+echo "  ✓ ASP resumed and TCP/IP autostart enabled"
+echo ""
 
 # Wait for clone job to complete
 wait_for_clone_job "$CLONE_TASK_ID"
