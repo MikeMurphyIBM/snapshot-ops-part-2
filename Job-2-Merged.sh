@@ -721,7 +721,7 @@ echo "  Volume ID: ${CLONE_BOOT_ID}"
 echo ""
 
 set +e
-ibmcloud pi volume update "$CLONE_BOOT_ID" --bootable
+ibmcloud pi volume update "$CLONE_BOOT_ID" --bootable >/dev/null 2>&1
 UPDATE_RC=$?
 set -e
 
