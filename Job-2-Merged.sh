@@ -33,7 +33,7 @@ set -eu
 ################################################################################
 echo ""
 echo "========================================================================"
-echo " JOB 2: CLONE & RESTORE OPERATIONS (v9)"
+echo " JOB 2: CLONE & RESTORE OPERATIONS (v11)"
 echo " Purpose: Clone primary LPAR volumes and restore to secondary LPAR"
 echo "========================================================================"
 echo ""
