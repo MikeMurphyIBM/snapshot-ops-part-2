@@ -686,11 +686,13 @@ echo ""
 ################################################################################
 # STAGE 4: ATTACH VOLUMES TO SECONDARY LPAR
 # Logic:
-#   1. Attach boot volume first
-#   2. Wait for boot volume to be confirmed attached
+#   1. Attach boot volume as regular volume first
+#   2. Mark it as bootable after attachment
 #   3. Attach data volumes individually (if any)
-#   4. Wait for each data volume to be confirmed attached
+#   4. Wait for each volume to be confirmed attached
 ################################################################################
+
+
 echo "========================================================================"
 echo " STAGE 4/5: ATTACH VOLUMES TO SECONDARY LPAR"
 echo "========================================================================"
@@ -701,20 +703,17 @@ echo "  LPAR: ${SECONDARY_LPAR}"
 echo "  Instance ID: ${SECONDARY_INSTANCE_ID}"
 echo ""
 
-# --- Step 1: Attach boot volume first ---
-echo "→ Step 1: Attaching boot volume..."
+# --- Step 1: Attach boot volume as regular volume ---
+echo "→ Step 1: Attaching boot volume (as regular volume)..."
 echo "  Boot volume ID: ${CLONE_BOOT_ID}"
-echo "  Command: ibmcloud pi instance volume attach ${SECONDARY_INSTANCE_ID} --boot-volume ${CLONE_BOOT_ID}"
 echo ""
 
 set +e
-ATTACH_OUTPUT=$(ibmcloud pi instance volume attach "$SECONDARY_INSTANCE_ID" \
-    --boot-volume "$CLONE_BOOT_ID" 2>&1)
+ibmcloud pi instance volume attach "$SECONDARY_INSTANCE_ID" \
+    --volumes "$CLONE_BOOT_ID"
 ATTACH_RC=$?
 set -e
 
-echo "Attachment command output:"
-echo "$ATTACH_OUTPUT"
 echo ""
 
 if [[ $ATTACH_RC -ne 0 ]]; then
@@ -755,9 +754,30 @@ fi
 
 echo ""
 
-# --- Step 2: Attach data volumes individually (if any) ---
+# --- Step 2: Mark volume as bootable ---
+echo "→ Step 2: Marking volume as bootable..."
+echo "  Volume ID: ${CLONE_BOOT_ID}"
+echo ""
+
+set +e
+ibmcloud pi volume update "$CLONE_BOOT_ID" --bootable true
+UPDATE_RC=$?
+set -e
+
+echo ""
+
+if [[ $UPDATE_RC -ne 0 ]]; then
+    echo "✗ ERROR: Failed to mark volume as bootable (exit code: $UPDATE_RC)"
+    FAILED_STAGE="ATTACH_VOLUME"
+    exit 1
+fi
+
+echo "✓ Volume marked as bootable"
+echo ""
+
+# --- Step 3: Attach data volumes individually (if any) ---
 if [[ -n "$CLONE_DATA_IDS" ]]; then
-    echo "→ Step 2: Attaching data volumes individually..."
+    echo "→ Step 3: Attaching data volumes individually..."
     
     # Convert comma-separated IDs to array
     IFS=',' read -ra DATA_VOL_ARRAY <<<"$CLONE_DATA_IDS"
@@ -770,18 +790,14 @@ if [[ -n "$CLONE_DATA_IDS" ]]; then
     for DATA_VOL_ID in "${DATA_VOL_ARRAY[@]}"; do
         echo "→ Attaching data volume ${VOL_NUM}/${DATA_VOL_COUNT}..."
         echo "  Volume ID: ${DATA_VOL_ID}"
-        echo "  Command: ibmcloud pi instance volume attach ${SECONDARY_INSTANCE_ID} --volumes ${DATA_VOL_ID}"
         echo ""
         
-        # Attach single data volume
         set +e
-        ATTACH_OUTPUT=$(ibmcloud pi instance volume attach "$SECONDARY_INSTANCE_ID" \
-            --volumes "$DATA_VOL_ID" 2>&1)
+        ibmcloud pi instance volume attach "$SECONDARY_INSTANCE_ID" \
+            --volumes "$DATA_VOL_ID"
         ATTACH_RC=$?
         set -e
         
-        echo "Attachment command output:"
-        echo "$ATTACH_OUTPUT"
         echo ""
         
         if [[ $ATTACH_RC -ne 0 ]]; then
@@ -830,7 +846,7 @@ else
 fi
 
 echo ""
-echo "→ Pausing 5 minutes to allow system stabilization..."
+echo "→ Pausing 300 seconds to allow system stabilization..."
 sleep 300
 
 echo ""
@@ -838,9 +854,6 @@ echo "------------------------------------------------------------------------"
 echo " Stage 4 Complete: All volumes attached and verified"
 echo "------------------------------------------------------------------------"
 echo ""
-
-
-echo " Stage 4 Complete: All volumes attached and verified"
 echo "------------------------------------------------------------------------"
 echo ""
 
