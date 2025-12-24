@@ -810,8 +810,8 @@ else
 fi
 
 echo ""
-echo "→ Pausing 180 seconds to allow system stabilization..."
-sleep 180
+echo "→ Pausing 5 minutes to allow system stabilization..."
+sleep 300
 
 echo ""
 echo "------------------------------------------------------------------------"
