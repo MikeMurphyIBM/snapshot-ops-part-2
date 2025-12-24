@@ -211,36 +211,16 @@ wait_for_clone_job() {
     done
 }
 
-#wait_for_clone_job() {
-#    local task_id=$1
- #   echo "→ Waiting for asynchronous clone task: ${task_id}..."
-  
-#    while true; do
-#        STATUS=$(ibmcloud pi volume clone-async get "$task_id" --json \
-#            | jq -r '.status')
-        
-#        if [[ "$STATUS" == "completed" ]]; then
-#            echo "✓ Clone task completed successfully"
-#            break
-#        elif [[ "$STATUS" == "failed" ]]; then
-#            echo "✗ ERROR: Clone task failed"
-#            exit 1
-#        else
-#            echo "  Clone task status: ${STATUS} - waiting 30s..."
-#            sleep 30
-#        fi
-#    done
-#}
+
 
 ################################################################################
 # ACTIVATE CLEANUP TRAP
 # Ensures cleanup runs on both ERR and EXIT
 ################################################################################
+
 trap 'cleanup_on_failure' ERR EXIT
 
-################################################################################
-# STAGE 1: IBM CLOUD AUTHENTICATION
-################################################################################
+
 echo "========================================================================"
 echo " STAGE 1/5: IBM CLOUD AUTHENTICATION & WORKSPACE TARGETING"
 echo "========================================================================"
@@ -398,15 +378,7 @@ echo ""
 # -------------------------------------------------------------------------
 echo "→ Secondary LPAR resolved in previous step..."
 
-#SECONDARY_INSTANCE_ID=$(ibmcloud pi instance list --json \
-#    | jq -r ".pvmInstances[] | select(.name == \"$SECONDARY_LPAR\") | .id")
 
-#if [[ -z "$SECONDARY_INSTANCE_ID" ]]; then
-#    echo "✗ ERROR: Secondary LPAR not found: ${SECONDARY_LPAR}"
-#    exit 1
-#fi
-
-#echo "✓ Secondary LPAR found"
 echo "  Name: ${SECONDARY_LPAR}"
 echo "  Instance ID: ${SECONDARY_INSTANCE_ID}"
 echo ""
@@ -482,14 +454,7 @@ echo ""
 # ------------------------------------------------------------------------------
 # STAGE 3a: Install SSH Client and SSH Keys
 # ------------------------------------------------------------------------------
-#echo "→ Installing SSH client..."
 
-#set +e
-#apt-get update -qq > /dev/null 2>&1
-#apt-get install -y openssh-client -qq > /dev/null 2>&1
-#set -e
-
-#echo "  ✓ SSH client installed"
 echo ""
 
 echo "→ Installing SSH keys from Code Engine secrets..."
@@ -519,10 +484,6 @@ echo "  ✓ IBMi SSH key installed"
 echo ""
 
 
-
-# ------------------------------------------------------------------------------
-# STAGE 3b: SSH to IBMi and Run Preparation Commands
-# ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
 # STAGE 3b: SSH to IBMi and Run Preparation Commands
 # ------------------------------------------------------------------------------
@@ -540,15 +501,13 @@ ssh -i "$VSI_KEY_FILE" \
         sleep 15; \
         system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*FRCWRT)\"; \
         sleep 30; \
-        system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*FRCWRT)\"; \
-        sleep 30; \
         system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*SUSPEND) SSPTIMO(120)\"'" || true
 
 echo "  ✓ IBMi preparation commands completed - ASP suspended for 120 seconds"
 echo ""
 
-echo "→ Waiting 10 seconds before initiating volume clone..."
-sleep 10
+echo "→ Waiting 5 seconds before initiating volume clone..."
+sleep 5
 echo ""
 
 # ------------------------------------------------------------------------------
@@ -556,7 +515,6 @@ echo ""
 # ------------------------------------------------------------------------------
 echo "→ Submitting clone request..."
 echo "  Clone prefix: ${CLONE_PREFIX}"
-#echo "  Storage tier: ${STORAGE_TIER}"
 echo "  Source volumes: ${PRIMARY_VOLUME_IDS}"
 
 CLONE_JSON=$(ibmcloud pi volume clone-async create "$CLONE_PREFIX" \
@@ -581,21 +539,6 @@ echo ""
 echo "→ Waiting before resuming ASP operations..."
 sleep 90
 echo ""
-
-# Resume ASP immediately after clone initiation
-#echo "→ Resuming ASP on IBMi..."
-
-#ssh -i "$VSI_KEY_FILE" \
-#  -o StrictHostKeyChecking=no \
-#  -o UserKnownHostsFile=/dev/null \
-#  murphy@52.118.255.179 \
-#  "ssh -i /home/murphy/.ssh/id_ed25519_vsi \
-#       -o StrictHostKeyChecking=no \
-#       -o UserKnownHostsFile=/dev/null \
-#       murphy@192.168.0.109 \
-#       'system \"CHGASPACT ASPDEV(*SYSBAS) OPTION(*RESUME)\"; \
-#        system \"CHGTCPIFC INTNETADR('\''192.168.0.109'\'') AUTOSTART(*YES)\"'" || true
-
 echo "  ✓ ASP resumed"
 echo ""
 
@@ -1023,12 +966,6 @@ echo "------------------------------------------------------------------------"
 echo ""
 
 
-#echo ""
-#echo "------------------------------------------------------------------------"
-#echo " Waiting 3 minutes for LPAR stabilization..."
-#echo "------------------------------------------------------------------------"
-#echo ""
-#sleep 180
 
 ###############################################################################
 # FINAL VALIDATION & SUMMARY
