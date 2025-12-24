@@ -887,7 +887,8 @@ if [[ "$CURRENT_STATUS" != "ACTIVE" ]]; then
         echo "  Start attempt ${START_ATTEMPT}/3"
 
         set +e
-        START_OUTPUT=$(ibmcloud pi instance-start "$SECONDARY_INSTANCE_ID" 2>&1)
+        START_OUTPUT=$(ibmcloud pi instance action "$SECONDARY_INSTANCE_ID" \
+            --operation start 2>&1)
         RC=$?
         set -e
 
