@@ -681,6 +681,8 @@ echo " Stage 3 Complete: All volumes cloned and verified available"
 echo "------------------------------------------------------------------------"
 echo ""
 
+
+
 ################################################################################
 # STAGE 4: ATTACH VOLUMES TO SECONDARY LPAR
 # Logic:
@@ -689,8 +691,6 @@ echo ""
 #   3. Attach data volumes individually (if any)
 #   4. Wait for each data volume to be confirmed attached
 ################################################################################
-
-
 echo "========================================================================"
 echo " STAGE 4/5: ATTACH VOLUMES TO SECONDARY LPAR"
 echo "========================================================================"
@@ -704,14 +704,24 @@ echo ""
 # --- Step 1: Attach boot volume first ---
 echo "→ Step 1: Attaching boot volume..."
 echo "  Boot volume ID: ${CLONE_BOOT_ID}"
+echo "  Command: ibmcloud pi instance volume attach ${SECONDARY_INSTANCE_ID} --boot-volume ${CLONE_BOOT_ID}"
+echo ""
 
-ibmcloud pi instance volume attach "$SECONDARY_INSTANCE_ID" \
-    --boot-volume "$CLONE_BOOT_ID" \
-    >/dev/null 2>&1 || {
-        echo "✗ ERROR: Boot volume attachment failed"
-        FAILED_STAGE="ATTACH_VOLUME"
-        exit 1
-    }
+set +e
+ATTACH_OUTPUT=$(ibmcloud pi instance volume attach "$SECONDARY_INSTANCE_ID" \
+    --boot-volume "$CLONE_BOOT_ID" 2>&1)
+ATTACH_RC=$?
+set -e
+
+echo "Attachment command output:"
+echo "$ATTACH_OUTPUT"
+echo ""
+
+if [[ $ATTACH_RC -ne 0 ]]; then
+    echo "✗ ERROR: Boot volume attachment failed (exit code: $ATTACH_RC)"
+    FAILED_STAGE="ATTACH_VOLUME"
+    exit 1
+fi
 
 echo "✓ Boot volume attachment request accepted"
 echo ""
@@ -760,15 +770,25 @@ if [[ -n "$CLONE_DATA_IDS" ]]; then
     for DATA_VOL_ID in "${DATA_VOL_ARRAY[@]}"; do
         echo "→ Attaching data volume ${VOL_NUM}/${DATA_VOL_COUNT}..."
         echo "  Volume ID: ${DATA_VOL_ID}"
+        echo "  Command: ibmcloud pi instance volume attach ${SECONDARY_INSTANCE_ID} --volumes ${DATA_VOL_ID}"
+        echo ""
         
         # Attach single data volume
-        ibmcloud pi instance volume attach "$SECONDARY_INSTANCE_ID" \
-            --volumes "$DATA_VOL_ID" \
-            >/dev/null 2>&1 || {
-                echo "✗ ERROR: Data volume attachment failed: ${DATA_VOL_ID}"
-                FAILED_STAGE="ATTACH_VOLUME"
-                exit 1
-            }
+        set +e
+        ATTACH_OUTPUT=$(ibmcloud pi instance volume attach "$SECONDARY_INSTANCE_ID" \
+            --volumes "$DATA_VOL_ID" 2>&1)
+        ATTACH_RC=$?
+        set -e
+        
+        echo "Attachment command output:"
+        echo "$ATTACH_OUTPUT"
+        echo ""
+        
+        if [[ $ATTACH_RC -ne 0 ]]; then
+            echo "✗ ERROR: Data volume attachment failed (exit code: $ATTACH_RC): ${DATA_VOL_ID}"
+            FAILED_STAGE="ATTACH_VOLUME"
+            exit 1
+        fi
         
         echo "✓ Data volume attachment request accepted"
         echo ""
@@ -810,11 +830,16 @@ else
 fi
 
 echo ""
-echo "→ Pausing 5 minutes to allow system stabilization..."
-sleep 300
+echo "→ Pausing 180 seconds to allow system stabilization..."
+sleep 180
 
 echo ""
 echo "------------------------------------------------------------------------"
+echo " Stage 4 Complete: All volumes attached and verified"
+echo "------------------------------------------------------------------------"
+echo ""
+
+
 echo " Stage 4 Complete: All volumes attached and verified"
 echo "------------------------------------------------------------------------"
 echo ""
