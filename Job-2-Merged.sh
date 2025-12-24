@@ -358,6 +358,18 @@ if [[ "$RESUME_AT_STAGE_5" -eq 1 ]]; then
     echo "  Boot volume ID : ${CLONE_BOOT_ID}"
     echo "  Data volume IDs: ${CLONE_DATA_IDS:-None}"
     echo ""
+
+    # ADD THIS: Calculate total volume count for resume mode
+    if [[ -n "$CLONE_DATA_IDS" ]]; then
+        IFS=',' read -ra _VOLS <<<"${CLONE_BOOT_ID},${CLONE_DATA_IDS}"
+    else
+        IFS=',' read -ra _VOLS <<<"${CLONE_BOOT_ID}"
+    fi
+    TOTAL_VOLUME_COUNT=${#_VOLS[@]}
+    unset _VOLS
+    
+    echo "  Total volumes   : ${TOTAL_VOLUME_COUNT}"
+    echo ""
 fi
 
 
