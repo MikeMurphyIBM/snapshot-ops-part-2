@@ -2,7 +2,7 @@
 
 ################################################################################
 # JOB 2: CLONE & RESTORE (NO SNAPSHOTS) - WITH IBMi SSH PREP
-echo " Version: v9"
+echo " Version: v10"
 # attaching volumes individually
 # suspending ASP for 15 seconds
 # 15 minutes to allow volumes to attach
@@ -830,8 +830,8 @@ else
 fi
 
 echo ""
-echo "→ Pausing 180 seconds to allow system stabilization..."
-sleep 180
+echo "→ Pausing 5 minutes to allow system stabilization..."
+sleep 300
 
 echo ""
 echo "------------------------------------------------------------------------"
